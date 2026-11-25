@@ -1,0 +1,61 @@
+id = "mikrotik"
+name = "MikroTik RouterOS / SwOS"
+vendor = "MikroTik"
+sys_object_id_prefixes = ["1.3.6.1.4.1.14988"]
+default_vendor_image_key = "router"
+
+[[sensors]]
+name = "Board Temperature"
+category = "temperature"
+oid = "1.3.6.1.4.1.14988.1.1.3.10.0"
+scale = 0.1
+unit = "C"
+is_table = false
+warn_threshold = 65.0
+crit_threshold = 80.0
+
+[[sensors]]
+name = "CPU Temperature"
+category = "temperature"
+oid = "1.3.6.1.4.1.14988.1.1.3.11.0"
+scale = 0.1
+unit = "C"
+is_table = false
+warn_threshold = 75.0
+crit_threshold = 90.0
+
+[[sensors]]
+name = "Supply Voltage"
+category = "voltage"
+oid = "1.3.6.1.4.1.14988.1.1.3.8.0"
+scale = 0.1
+unit = "V"
+is_table = false
+
+[[sensors]]
+name = "CPU Load"
+category = "cpu"
+oid = "1.3.6.1.2.1.25.3.3.1.2"
+scale = 1.0
+unit = "%"
+is_table = true
+warn_threshold = 85.0
+crit_threshold = 95.0
+
+[[model_rules]]
+descr_or_model_pattern = "crs"
+model_name = "Cloud Router Switch"
+image_key = "crs"
+device_type_name = "CRS"
+
+[[model_rules]]
+descr_or_model_pattern = "ccr"
+model_name = "Cloud Core Router"
+image_key = "router"
+device_type_name = "Router"
+
+[[model_rules]]
+descr_or_model_pattern = "rb"
+model_name = "RouterBOARD"
+image_key = "router"
+device_type_name = "Router"

@@ -1,0 +1,69 @@
+[package]
+name = "nextdude-client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+build = "build.rs"
+description = "Native Windows desktop client for NextDude network monitor"
+
+[lints.rust]
+unsafe_code = "deny"
+unused_imports = "warn"
+unused_variables = "warn"
+dead_code = "warn"
+rust_2018_idioms = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[[bin]]
+name = "nextdude-client"
+path = "src/main.rs"
+
+[dependencies]
+nextdude-common = { path = "../common" }
+nextdude-client-core = { path = "../client-core" }
+tokio = { workspace = true }
+eframe = { workspace = true }
+egui_plot = { workspace = true }
+tray-icon = { workspace = true }
+muda = { workspace = true }
+rfd = { workspace = true }
+arboard = { workspace = true }
+image = { workspace = true }
+resvg = { workspace = true }
+rustls = { workspace = true }
+chrono = { workspace = true }
+csv = { workspace = true }
+regex = { workspace = true }
+base64 = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security_Cryptography",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_System_Power",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
+    "Win32_Media_Audio",
+] }
+windows = { workspace = true, features = [
+    "Data_Xml_Dom",
+    "UI_Notifications",
+] }
+
+[build-dependencies]
+winresource = { workspace = true }

@@ -1,0 +1,67 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="NextDude Client"
+           Manufacturer="NextDude Contributors"
+           Version="0.1.0"
+           UpgradeCode="A9D5F7D2-8D94-4F55-A58E-4E2F3A7A1101"
+           Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="MainFeature" Title="NextDude Desktop Client" Level="1">
+      <ComponentGroupRef Id="ClientFilesGroup" />
+      <ComponentGroupRef Id="StartMenuShortcutGroup" />
+    </Feature>
+
+    <Feature Id="AutostartFeature" Title="Launch on Windows Login" Level="1">
+      <ComponentRef Id="AutostartRegistryComponent" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="NextDude" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="NextDude" />
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="ClientFilesGroup" Directory="INSTALLFOLDER">
+      <Component Id="ClientExeComponent" Guid="7C3B82A4-1B27-4F31-91F2-119A82C1D201">
+        <File Id="NextDudeClientExe" Source="..\..\target\release\nextdude-client.exe" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="StartMenuShortcutGroup" Directory="ApplicationProgramsFolder">
+      <Component Id="StartMenuShortcutComponent" Guid="8E4D91B6-2C38-4A42-92A3-220B93D2E302">
+        <Shortcut Id="NextDudeStartShortcut"
+                  Name="NextDude Client"
+                  Description="NextDude Network Monitor"
+                  Target="[INSTALLFOLDER]nextdude-client.exe"
+                  WorkingDirectory="INSTALLFOLDER">
+          <ShortcutProperty Key="System.AppUserModel.ID" Value="NextDude.Client.Desktop.1" />
+        </Shortcut>
+        <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\NextDude\Client"
+                       Name="StartMenuShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="AutostartRegistryComponent" Guid="9F5E02C7-3D49-4B53-A3B4-331C04E3F403">
+        <RegistryValue Root="HKCU"
+                       Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                       Name="NextDude"
+                       Type="string"
+                       Value="&quot;[INSTALLFOLDER]nextdude-client.exe&quot;"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

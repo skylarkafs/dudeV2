@@ -1,0 +1,85 @@
+[package]
+name = "nextdude-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Headless Linux network monitoring engine and gRPC server for NextDude"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "nextdude-server"
+path = "src/main.rs"
+
+[dependencies]
+nextdude-common = { path = "../common" }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tokio-util = { workspace = true }
+tonic = { workspace = true }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+ipnet = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+base64 = { workspace = true }
+zeroize = { workspace = true }
+rand = { workspace = true }
+rustls = { workspace = true }
+rusqlite = { workspace = true }
+argon2 = { workspace = true }
+chacha20poly1305 = { workspace = true }
+rcgen = { workspace = true }
+clap = { workspace = true }
+socket2 = { workspace = true }
+hickory-resolver = { workspace = true }
+reqwest = { workspace = true }
+resvg = { workspace = true }
+image = { workspace = true }
+roxmltree = { workspace = true }
+md-5 = { workspace = true }
+sha1 = { workspace = true }
+hmac = { workspace = true }
+aes = { workspace = true }
+des = { workspace = true }
+cbc = { workspace = true }
+cfb-mode = { workspace = true }
+cipher = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tracing-journald = { workspace = true }
+
+[package.metadata.deb]
+maintainer = "NextDude Maintainers <ops@nextdude.example>"
+copyright = "2026, NextDude Contributors"
+license-file = ["../../LICENSE", "0"]
+extended-description = "NextDude headless network monitoring daemon for Linux (ICMP, SNMPv1/v2c/v3, syslog, trap, discovery, alerting, gRPC TLS server)."
+section = "net"
+priority = "optional"
+depends = "$auto, systemd"
+maintainer-scripts = "../../packaging/linux"
+assets = [
+    ["target/release/nextdude-server", "usr/bin/nextdude-server", "755"],
+    ["../../packaging/linux/server.toml", "etc/nextdude/server.toml", "640"],
+    ["../../profiles/*.toml", "usr/share/nextdude/profiles/", "644"],
+]
+
+[package.metadata.deb.systemd-units]
+unit-scripts = "../../packaging/linux"
+enable = true
+start = false
+stop-on-upgrade = true
+restart-after-upgrade = true

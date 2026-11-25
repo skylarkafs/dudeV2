@@ -1,0 +1,15 @@
+id = "alcatel_lucent"
+name = "Alcatel-Lucent Enterprise / OmniSwitch"
+vendor = "Alcatel-Lucent"
+sys_object_id_prefixes = ["1.3.6.1.4.1.6486"]
+default_vendor_image_key = "switch"
+
+[[sensors]]
+name = "Chassis Temperature (chasEntTempCurrent)"
+category = "temperature"
+oid = "1.3.6.1.4.1.6486.801.1.1.1.1.1.2.1.1"
+scale = 1.0
+unit = "C"
+is_table = true
+warn_threshold = 65.0
+crit_threshold = 80.0

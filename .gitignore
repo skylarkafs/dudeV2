@@ -1,0 +1,31 @@
+# Build artifacts
+/target/
+**/target/
+/dist/
+**/*.rs.bk
+Cargo.lock
+
+# Packaging outputs
+*.deb
+*.msi
+*.wixobj
+*.wixpdb
+*.tar.gz
+
+# IDE and OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Runtime / test state
+*.db
+*.db-wal
+*.db-shm
+*.key
+*.pem
+logs/

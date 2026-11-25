@@ -1,0 +1,1016 @@
+syntax = "proto3";
+
+package nextdude.v1;
+
+message Empty {}
+
+message Point2d {
+  double x = 1;
+  double y = 2;
+}
+
+enum ProbeState {
+  PROBE_STATE_UNSPECIFIED = 0;
+  PROBE_STATE_UNKNOWN = 1;
+  PROBE_STATE_UP = 2;
+  PROBE_STATE_DOWN = 3;
+  PROBE_STATE_UNREACHABLE = 4;
+  PROBE_STATE_PARTIAL = 5;
+}
+
+enum ProbeKind {
+  PROBE_KIND_UNSPECIFIED = 0;
+  PROBE_KIND_ICMP = 1;
+  PROBE_KIND_TCP = 2;
+  PROBE_KIND_HTTP = 3;
+  PROBE_KIND_HTTPS = 4;
+  PROBE_KIND_DNS = 5;
+  PROBE_KIND_SNMP_OID = 6;
+  PROBE_KIND_SNMP_INTERFACE = 7;
+  PROBE_KIND_FTP = 8;
+  PROBE_KIND_SMTP = 9;
+  PROBE_KIND_IMAP = 10;
+  PROBE_KIND_POP3 = 11;
+  PROBE_KIND_SSH = 12;
+  PROBE_KIND_TELNET = 13;
+  PROBE_KIND_NTP = 14;
+  PROBE_KIND_SNMP_CUSTOM = 15;
+}
+
+enum LinkStatus {
+  LINK_STATUS_UNSPECIFIED = 0;
+  LINK_STATUS_UNKNOWN = 1;
+  LINK_STATUS_UP = 2;
+  LINK_STATUS_DOWN = 3;
+  LINK_STATUS_NO_REPLY = 4;
+  LINK_STATUS_FLAPPING = 5;
+}
+
+enum LinkStyle {
+  LINK_STYLE_UNSPECIFIED = 0;
+  LINK_STYLE_STRAIGHT = 1;
+  LINK_STYLE_CURVED = 2;
+  LINK_STYLE_ORTHOGONAL_ROUNDED = 3;
+}
+
+enum MasteringType {
+  MASTERING_TYPE_UNSPECIFIED = 0;
+  MASTERING_TYPE_SNMP_IF_TRAFFIC = 1;
+  MASTERING_TYPE_PROBE_LATENCY = 2;
+  MASTERING_TYPE_MANUAL = 3;
+}
+
+enum NodeShape {
+  NODE_SHAPE_UNSPECIFIED = 0;
+  NODE_SHAPE_ROUNDED_RECT = 1;
+  NODE_SHAPE_CIRCLE = 2;
+  NODE_SHAPE_FRAMELESS = 3;
+}
+
+enum NodeSize {
+  NODE_SIZE_UNSPECIFIED = 0;
+  NODE_SIZE_SMALL = 1;
+  NODE_SIZE_MEDIUM = 2;
+  NODE_SIZE_LARGE = 3;
+  NODE_SIZE_CUSTOM = 4;
+}
+
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_INFO = 1;
+  SEVERITY_WARNING = 2;
+  SEVERITY_CRITICAL = 3;
+}
+
+enum SnmpVersion {
+  SNMP_VERSION_UNSPECIFIED = 0;
+  SNMP_VERSION_V1 = 1;
+  SNMP_VERSION_V2C = 2;
+  SNMP_VERSION_V3 = 3;
+}
+
+enum SnmpAuthProtocol {
+  SNMP_AUTH_UNSPECIFIED = 0;
+  SNMP_AUTH_NONE = 1;
+  SNMP_AUTH_MD5 = 2;
+  SNMP_AUTH_SHA1 = 3;
+}
+
+enum SnmpPrivProtocol {
+  SNMP_PRIV_UNSPECIFIED = 0;
+  SNMP_PRIV_NONE = 1;
+  SNMP_PRIV_DES = 2;
+  SNMP_PRIV_AES128 = 3;
+}
+
+enum SnmpValueType {
+  SNMP_VALUE_TYPE_UNSPECIFIED = 0;
+  SNMP_VALUE_TYPE_GAUGE = 1;
+  SNMP_VALUE_TYPE_COUNTER = 2;
+  SNMP_VALUE_TYPE_INTEGER = 3;
+  SNMP_VALUE_TYPE_STRING = 4;
+}
+
+enum MapLayerMode {
+  MAP_LAYER_UNSPECIFIED = 0;
+  MAP_LAYER_LINKS = 1;
+  MAP_LAYER_DEPENDENCIES = 2;
+  MAP_LAYER_BOTH = 3;
+}
+
+enum ToolKind {
+  TOOL_KIND_UNSPECIFIED = 0;
+  TOOL_KIND_PING = 1;
+  TOOL_KIND_TRACEROUTE = 2;
+  TOOL_KIND_SNMP_GET = 3;
+  TOOL_KIND_SNMP_WALK = 4;
+  TOOL_KIND_TCP_CHECK = 5;
+  TOOL_KIND_DNS_LOOKUP = 6;
+}
+
+enum ChartAggregate {
+  CHART_AGGREGATE_UNSPECIFIED = 0;
+  CHART_AGGREGATE_RAW = 1;
+  CHART_AGGREGATE_ONE_MINUTE = 2;
+  CHART_AGGREGATE_FIVE_MINUTES = 3;
+  CHART_AGGREGATE_ONE_HOUR = 4;
+}
+
+message SnmpCredential {
+  SnmpVersion version = 1;
+  uint32 port = 2;
+  uint32 timeout_ms = 3;
+  uint32 retries = 4;
+  // Write-only on updates; server never returns plaintext secrets.
+  optional string community = 5;
+  bool has_community = 6;
+  string username = 7;
+  SnmpAuthProtocol auth_protocol = 8;
+  optional string auth_password = 9;
+  bool has_auth_password = 10;
+  SnmpPrivProtocol priv_protocol = 11;
+  optional string priv_password = 12;
+  bool has_priv_password = 13;
+}
+
+message StateColorPalette {
+  string up_hex = 1;
+  string down_hex = 2;
+  string unreachable_hex = 3;
+  string partial_hex = 4;
+  string unknown_hex = 5;
+  string flapping_hex = 6;
+  string no_reply_hex = 7;
+}
+
+message NetworkMap {
+  int64 id = 1;
+  uint64 version = 2;
+  string name = 3;
+  string description = 4;
+  optional uint32 poll_interval_sec_override = 5;
+  uint32 label_refresh_sec = 6;
+  StateColorPalette device_colors = 7;
+  StateColorPalette network_colors = 8;
+  StateColorPalette submap_colors = 9;
+  StateColorPalette static_colors = 10;
+  StateColorPalette link_colors = 11;
+  NodeShape default_node_shape = 12;
+  double default_link_thickness = 13;
+  LinkStyle default_link_style = 14;
+  optional int64 background_image_id = 15;
+  double background_scale = 16;
+  bool background_tile = 17;
+  bool locked = 18;
+  MapLayerMode default_layer = 19;
+}
+
+message DeviceType {
+  int64 id = 1;
+  uint64 version = 2;
+  string name = 3;
+  string default_icon_key = 4;
+  optional int64 default_image_id = 5;
+  repeated int64 default_probe_ids = 6;
+  string launcher_command = 7;
+}
+
+message Device {
+  int64 id = 1;
+  uint64 version = 2;
+  int64 map_id = 3;
+  string name = 4;
+  string address = 5;
+  int64 device_type_id = 6;
+  string vendor = 7;
+  string model = 8;
+  string sys_object_id = 9;
+  string sys_descr = 10;
+  uint64 sys_uptime_cs = 11;
+  repeated string tags = 12;
+  string notes = 13;
+  SnmpCredential snmp = 14;
+  double pos_x = 15;
+  double pos_y = 16;
+  NodeShape shape = 17;
+  NodeSize size = 18;
+  double custom_size_px = 19;
+  optional int64 custom_image_id = 20;
+  optional string resolved_image_key = 21;
+  optional uint32 poll_interval_sec_override = 22;
+  optional uint32 poll_priority_override = 23;
+  string label_template = 24;
+  ProbeState aggregate_state = 25;
+  double last_rtt_ms = 26;
+  int64 last_seen_utc = 27;
+  repeated string extra_ips = 28;
+  repeated string mac_addresses = 29;
+  optional int64 resolved_image_id = 30;
+}
+
+message ProbeDefinition {
+  int64 id = 1;
+  uint64 version = 2;
+  string name = 3;
+  ProbeKind kind = 4;
+  uint32 port = 5;
+  uint32 timeout_ms = 6;
+  uint32 down_threshold = 7;
+  uint32 up_threshold = 8;
+  string target_path_or_query = 9;
+  string expected_pattern = 10;
+  string snmp_oid = 11;
+  SnmpValueType snmp_value_type = 12;
+  double snmp_scale = 13;
+  string unit = 14;
+  optional double warn_threshold = 15;
+  optional double crit_threshold = 16;
+  bool builtin = 17;
+}
+
+message DeviceService {
+  int64 id = 1;
+  uint64 version = 2;
+  int64 device_id = 3;
+  int64 probe_id = 4;
+  string name = 5;
+  bool enabled = 6;
+  optional uint32 poll_interval_sec_override = 7;
+  optional uint32 down_threshold_override = 8;
+  optional uint32 up_threshold_override = 9;
+  ProbeState state = 10;
+  uint32 consecutive_failures = 11;
+  uint32 consecutive_successes = 12;
+  double last_value = 13;
+  string last_text = 14;
+  double last_rtt_ms = 15;
+  int64 last_check_utc = 16;
+  string interface_key = 17;
+}
+
+message DeviceInterface {
+  int64 id = 1;
+  int64 device_id = 2;
+  uint32 if_index = 3;
+  string stable_key = 4;
+  string name = 5;
+  string descr = 6;
+  string alias = 7;
+  string mac = 8;
+  uint64 speed_bps = 9;
+  uint32 admin_status = 10;
+  uint32 oper_status = 11;
+  double in_bps = 12;
+  double out_bps = 13;
+  int64 updated_utc = 14;
+}
+
+message LinkType {
+  int64 id = 1;
+  uint64 version = 2;
+  string name = 3;
+  uint64 max_speed_bps = 4;
+  double thickness = 5;
+  LinkStyle style = 6;
+  string color_hex = 7;
+  bool builtin = 8;
+}
+
+message NetworkLink {
+  int64 id = 1;
+  uint64 version = 2;
+  int64 map_id = 3;
+  int64 src_device_id = 4;
+  int64 dst_device_id = 5;
+  int64 master_device_id = 6;
+  MasteringType mastering_type = 7;
+  string interface_key = 8;
+  int64 link_type_id = 9;
+  optional uint64 max_speed_bps_override = 10;
+  optional LinkStyle style_override = 11;
+  bool history_enabled = 12;
+  repeated Point2d bend_points = 13;
+  LinkStatus status = 14;
+  double in_bps = 15;
+  double out_bps = 16;
+  double in_utilization_pct = 17;
+  double out_utilization_pct = 18;
+  string label = 19;
+}
+
+message MapNetwork {
+  int64 id = 1;
+  uint64 version = 2;
+  int64 map_id = 3;
+  string name = 4;
+  string cidr = 5;
+  double pos_x = 6;
+  double pos_y = 7;
+  double width = 8;
+  double height = 9;
+  optional int64 image_id = 10;
+  ProbeState state = 11;
+}
+
+message SubmapItem {
+  int64 id = 1;
+  uint64 version = 2;
+  int64 map_id = 3;
+  int64 target_map_id = 4;
+  string label = 5;
+  double pos_x = 6;
+  double pos_y = 7;
+  optional int64 image_id = 8;
+  ProbeState aggregate_state = 9;
+}
+
+message StaticItem {
+  int64 id = 1;
+  uint64 version = 2;
+  int64 map_id = 3;
+  string label = 4;
+  string kind = 5;
+  double pos_x = 6;
+  double pos_y = 7;
+  double width = 8;
+  double height = 9;
+  string color_hex = 10;
+  optional int64 image_id = 11;
+  uint32 font_size = 12;
+}
+
+message Dependency {
+  int64 id = 1;
+  uint64 version = 2;
+  int64 map_id = 3;
+  int64 parent_device_id = 4;
+  int64 child_device_id = 5;
+}
+
+message AlertRule {
+  int64 id = 1;
+  uint64 version = 2;
+  string name = 3;
+  bool enabled = 4;
+  optional int64 device_id = 5;
+  optional int64 probe_id = 6;
+  bool trigger_on_state_change = 7;
+  optional double value_threshold = 8;
+  bool threshold_greater_than = 9;
+  uint32 min_duration_sec = 10;
+  Severity severity = 11;
+  repeated int64 notification_channel_ids = 12;
+}
+
+message MaintenanceWindow {
+  int64 id = 1;
+  uint64 version = 2;
+  string name = 3;
+  optional int64 device_id = 4;
+  optional int64 map_id = 5;
+  int64 start_utc = 6;
+  int64 end_utc = 7;
+  bool recurring_weekly = 8;
+  uint32 weekday_mask = 9;
+  bool enabled = 10;
+}
+
+message OutageRecord {
+  int64 id = 1;
+  int64 device_id = 2;
+  string device_name = 3;
+  int64 service_id = 4;
+  string service_name = 5;
+  int64 started_utc = 6;
+  optional int64 ended_utc = 7;
+  string root_cause_note = 8;
+  bool suppressed_by_dependency = 9;
+}
+
+message EventLogEntry {
+  int64 id = 1;
+  int64 timestamp_utc = 2;
+  Severity severity = 3;
+  string category = 4;
+  optional int64 device_id = 5;
+  string device_name = 6;
+  string message = 7;
+  bool acknowledged = 8;
+  optional string ack_by = 9;
+  optional int64 ack_utc = 10;
+}
+
+message SyslogMessage {
+  int64 id = 1;
+  int64 timestamp_utc = 2;
+  string source_ip = 3;
+  optional int64 device_id = 4;
+  string device_name = 5;
+  uint32 facility = 6;
+  uint32 severity = 7;
+  string hostname = 8;
+  string app_name = 9;
+  string message = 10;
+  string raw_format = 11;
+}
+
+message SyslogDropStats {
+  uint64 received_total = 1;
+  uint64 dropped_total = 2;
+}
+
+message TrapVarbind {
+  string oid = 1;
+  string oid_name = 2;
+  string value_type = 3;
+  string value = 4;
+}
+
+message TrapMessage {
+  int64 id = 1;
+  int64 timestamp_utc = 2;
+  string source_ip = 3;
+  optional int64 device_id = 4;
+  string device_name = 5;
+  SnmpVersion snmp_version = 6;
+  string trap_oid = 7;
+  string trap_name = 8;
+  repeated TrapVarbind varbinds = 9;
+}
+
+message NotificationChannel {
+  int64 id = 1;
+  uint64 version = 2;
+  string name = 3;
+  string kind = 4; // "event_log", "syslog_forward", "telegram"
+  bool enabled = 5;
+  string target = 6; // chat_id or host:port
+  optional string secret_token = 7; // write-only Telegram bot token
+  bool has_secret_token = 8;
+  uint32 rate_limit_per_min = 9;
+}
+
+message ChartSeriesSource {
+  int64 id = 1;
+  string label = 2;
+  optional int64 service_id = 3;
+  optional int64 link_id = 4;
+  string metric = 5; // "value", "rtt", "in_bps", "out_bps", "util_pct"
+  string color_hex = 6;
+}
+
+message ChartDefinition {
+  int64 id = 1;
+  uint64 version = 2;
+  string name = 3;
+  repeated ChartSeriesSource sources = 4;
+}
+
+message ChartSample {
+  int64 timestamp_utc = 1;
+  double avg = 2;
+  double min = 3;
+  double max = 4;
+}
+
+message ChartSeriesData {
+  int64 source_id = 1;
+  string label = 2;
+  string color_hex = 3;
+  repeated ChartSample samples = 4;
+}
+
+message ImageAssetMeta {
+  int64 id = 1;
+  uint64 version = 2;
+  string name = 3;
+  string mime_type = 4;
+  string vendor = 5;
+  string model = 6;
+  repeated string tags = 7;
+  uint32 width = 8;
+  uint32 height = 9;
+  uint64 byte_size = 10;
+  bool builtin = 11;
+}
+
+message AdminGroup {
+  int64 id = 1;
+  uint64 version = 2;
+  string name = 3;
+  repeated string permissions = 4;
+}
+
+message AdminUser {
+  int64 id = 1;
+  uint64 version = 2;
+  string username = 3;
+  int64 group_id = 4;
+  string group_name = 5;
+  bool enabled = 6;
+  optional string password = 7; // write-only
+  int64 locked_until_utc = 8;
+}
+
+message ActiveAdminSession {
+  string session_id = 1;
+  int64 admin_id = 2;
+  string username = 3;
+  string remote_addr = 4;
+  string client_info = 5;
+  int64 connected_utc = 6;
+  int64 last_active_utc = 7;
+}
+
+message HistoryAction {
+  int64 id = 1;
+  int64 timestamp_utc = 2;
+  int64 admin_id = 3;
+  string username = 4;
+  string action = 5;
+  string target_type = 6;
+  string target_id = 7;
+  string details = 8;
+}
+
+message UserPreferences {
+  int64 admin_id = 1;
+  optional int64 last_map_id = 2;
+  string panel_layout_json = 3;
+  string filters_json = 4;
+}
+
+message ServerSettings {
+  uint32 global_poll_interval_sec = 1;
+  uint32 max_concurrent_probes = 2;
+  uint32 max_concurrent_per_host = 3;
+  uint32 flapping_changes = 4;
+  uint32 flapping_window_min = 5;
+  bool syslog_enabled = 6;
+  uint32 syslog_port = 7;
+  string syslog_forward_addr = 8;
+  bool trap_enabled = 9;
+  uint32 trap_port = 10;
+  bool mndp_enabled = 11;
+  bool allow_image_url_import = 12;
+  uint32 retention_raw_hours = 13;
+  uint32 retention_rollup_days = 14;
+  uint32 retention_events_days = 15;
+  uint32 retention_syslog_days = 16;
+  uint32 retention_audit_days = 17;
+  uint32 icmp_mode = 18; // 0=unavailable, 1=dgram, 2=raw
+  string icmp_status_message = 19;
+  uint64 version = 20;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+  uint32 api_version = 3;
+  string client_info = 4;
+}
+
+message LoginResponse {
+  string session_token = 1;
+  int64 admin_id = 2;
+  string username = 3;
+  string group_name = 4;
+  repeated string permissions = 5;
+  uint32 api_version = 6;
+  string app_name = 7;
+  UserPreferences preferences = 8;
+}
+
+message SubscribeRequest {
+  optional int64 active_map_id = 1;
+  optional int64 active_device_id = 2;
+  repeated int64 active_chart_ids = 3;
+  bool include_events = 4;
+  bool include_syslog = 5;
+  bool include_traps = 6;
+  bool include_outages = 7;
+}
+
+message SnapshotPayload {
+  repeated NetworkMap maps = 1;
+  repeated Device devices = 2;
+  repeated DeviceService services = 3;
+  repeated ProbeDefinition probes = 4;
+  repeated DeviceType device_types = 5;
+  repeated LinkType link_types = 6;
+  repeated NetworkLink links = 7;
+  repeated MapNetwork networks = 8;
+  repeated SubmapItem submaps = 9;
+  repeated StaticItem static_items = 10;
+  repeated Dependency dependencies = 11;
+  repeated DeviceInterface interfaces = 12;
+  repeated AlertRule alert_rules = 13;
+  repeated MaintenanceWindow maintenance_windows = 14;
+  repeated OutageRecord outages = 15;
+  repeated ChartDefinition charts = 16;
+  repeated ImageAssetMeta images = 17;
+  repeated NotificationChannel notification_channels = 18;
+  repeated EventLogEntry recent_events = 19;
+  repeated SyslogMessage recent_syslog = 20;
+  repeated TrapMessage recent_traps = 21;
+  SyslogDropStats syslog_stats = 22;
+  ServerSettings server_settings = 23;
+}
+
+message LiveServiceSample {
+  int64 service_id = 1;
+  int64 device_id = 2;
+  ProbeState state = 3;
+  double value = 4;
+  string text = 5;
+  double rtt_ms = 6;
+  int64 checked_utc = 7;
+}
+
+message LiveLinkSample {
+  int64 link_id = 1;
+  LinkStatus status = 2;
+  double in_bps = 3;
+  double out_bps = 4;
+  double in_util_pct = 5;
+  double out_util_pct = 6;
+}
+
+message LiveDeviceSample {
+  int64 device_id = 1;
+  ProbeState aggregate_state = 2;
+  double last_rtt_ms = 3;
+  int64 last_seen_utc = 4;
+  uint64 sys_uptime_cs = 5;
+}
+
+message LiveMetricsBatch {
+  repeated LiveDeviceSample devices = 1;
+  repeated LiveServiceSample services = 2;
+  repeated LiveLinkSample links = 3;
+}
+
+message EntityDelta {
+  string entity_type = 1; // "map", "device", "service", "probe", "link", etc.
+  bool deleted = 2;
+  int64 entity_id = 3;
+  optional NetworkMap map = 4;
+  optional Device device = 5;
+  optional DeviceService service = 6;
+  optional ProbeDefinition probe = 7;
+  optional DeviceType device_type = 8;
+  optional LinkType link_type = 9;
+  optional NetworkLink link = 10;
+  optional MapNetwork network = 11;
+  optional SubmapItem submap = 12;
+  optional StaticItem static_item = 13;
+  optional Dependency dependency = 14;
+  optional AlertRule alert_rule = 15;
+  optional MaintenanceWindow maintenance = 16;
+  optional NotificationChannel notification_channel = 17;
+  optional ChartDefinition chart = 18;
+  optional ImageAssetMeta image = 19;
+  optional ServerSettings server_settings = 20;
+}
+
+message AlertEvent {
+  int64 event_id = 1;
+  int64 device_id = 2;
+  string device_name = 3;
+  string title = 4;
+  string description = 5;
+  Severity severity = 6;
+  int64 timestamp_utc = 7;
+}
+
+message DiscoveryCandidateDevice {
+  string temp_id = 1;
+  string ip = 2;
+  string sys_name = 3;
+  string sys_descr = 4;
+  string sys_object_id = 5;
+  string vendor = 6;
+  string model = 7;
+  repeated string macs = 8;
+  bool duplicate_existing = 9;
+  optional int64 existing_device_id = 10;
+  uint32 matched_cred_index = 11;
+}
+
+message DiscoveryCandidateLink {
+  string src_temp_id = 1;
+  string dst_temp_id = 2;
+  string src_interface = 3;
+  string dst_interface = 4;
+  string protocol = 5; // "LLDP", "CDP", "MNDP"
+}
+
+message DiscoveryProgressEvent {
+  string job_id = 1;
+  uint32 total_hosts = 2;
+  uint32 scanned_hosts = 3;
+  uint32 alive_hosts = 4;
+  bool finished = 5;
+  string status_text = 6;
+  repeated DiscoveryCandidateDevice candidates = 7;
+  repeated DiscoveryCandidateLink candidate_links = 8;
+}
+
+message StreamEvent {
+  uint64 seq = 1;
+  oneof payload {
+    SnapshotPayload snapshot = 2;
+    LiveMetricsBatch live_metrics = 3;
+    EntityDelta entity_delta = 4;
+    EventLogEntry event_log = 5;
+    SyslogMessage syslog_entry = 6;
+    TrapMessage trap_entry = 7;
+    AlertEvent alert = 8;
+    OutageRecord outage = 9;
+    DiscoveryProgressEvent discovery = 10;
+    SyslogDropStats syslog_stats = 11;
+    string resync_required = 12;
+    int64 heartbeat_utc = 13;
+  }
+}
+
+message IdRequest {
+  int64 id = 1;
+  uint64 expected_version = 2;
+}
+
+message CopyPasteRequest {
+  int64 source_map_id = 1;
+  int64 target_map_id = 2;
+  repeated int64 device_ids = 3;
+  repeated int64 network_ids = 4;
+  repeated int64 static_ids = 5;
+  double offset_x = 6;
+  double offset_y = 7;
+}
+
+message CopyPasteResponse {
+  repeated int64 created_device_ids = 1;
+}
+
+message AutoLayoutRequest {
+  int64 map_id = 1;
+  uint32 iterations = 2;
+}
+
+message AcknowledgeAlertRequest {
+  int64 event_id = 1;
+}
+
+message StartDiscoveryRequest {
+  repeated string cidrs = 1;
+  uint32 concurrency = 2;
+  uint32 rate_limit_per_sec = 3;
+  repeated SnmpCredential credentials = 4;
+  bool include_mndp = 5;
+  bool include_lldp_cdp = 6;
+}
+
+message StartDiscoveryResponse {
+  string job_id = 1;
+}
+
+message ImportDiscoveryRequest {
+  string job_id = 1;
+  int64 target_map_id = 2;
+  repeated string selected_temp_ids = 3;
+  bool import_links = 4;
+  bool auto_layout = 5;
+}
+
+message ImportDiscoveryResponse {
+  uint32 imported_devices = 1;
+  uint32 imported_links = 2;
+}
+
+message RunToolRequest {
+  ToolKind kind = 1;
+  string target = 2;
+  uint32 port = 3;
+  string oid = 4;
+  optional int64 device_id = 5;
+  uint32 count = 6;
+}
+
+message ToolOutputChunk {
+  string line = 1;
+  bool finished = 2;
+  bool error = 3;
+}
+
+message QueryChartSeriesRequest {
+  int64 chart_id = 1;
+  int64 start_utc = 2;
+  int64 end_utc = 3;
+  uint32 max_points = 4;
+}
+
+message QueryChartSeriesResponse {
+  repeated ChartSeriesData series = 1;
+  ChartAggregate aggregate_used = 2;
+}
+
+message PageQueryRequest {
+  int64 start_utc = 1;
+  int64 end_utc = 2;
+  optional int64 device_id = 3;
+  string text_filter = 4;
+  optional Severity min_severity = 5;
+  uint32 limit = 6;
+  uint32 offset = 7;
+}
+
+message QueryEventsResponse {
+  repeated EventLogEntry items = 1;
+  uint64 total = 2;
+}
+
+message QuerySyslogResponse {
+  repeated SyslogMessage items = 1;
+  uint64 total = 2;
+}
+
+message QueryTrapsResponse {
+  repeated TrapMessage items = 1;
+  uint64 total = 2;
+}
+
+message QueryOutagesResponse {
+  repeated OutageRecord items = 1;
+  uint64 total = 2;
+}
+
+message QueryHistoryActionsResponse {
+  repeated HistoryAction items = 1;
+  uint64 total = 2;
+}
+
+message UploadImageRequest {
+  string name = 1;
+  string vendor = 2;
+  string model = 3;
+  repeated string tags = 4;
+  bytes raw_data = 5;
+}
+
+message ImportImageUrlRequest {
+  string url = 1;
+  string name = 2;
+  string vendor = 3;
+  string model = 4;
+  repeated string tags = 5;
+}
+
+message GetImageBlobRequest {
+  int64 image_id = 1;
+  string variant = 2; // "thumb", "64", "128", "256", "original"
+}
+
+message GetImageBlobResponse {
+  string mime_type = 1;
+  bytes data = 2;
+}
+
+message ListAdminsResponse {
+  repeated AdminUser users = 1;
+  repeated AdminGroup groups = 2;
+}
+
+message ListActiveAdminsResponse {
+  repeated ActiveAdminSession sessions = 1;
+}
+
+message KickSessionRequest {
+  string session_id = 1;
+}
+
+message UndoRedoResponse {
+  bool applied = 1;
+  string description = 2;
+}
+
+message VendorProfileSummary {
+  string name = 1;
+  string vendor = 2;
+  repeated string sys_object_id_prefixes = 3;
+  uint32 sensor_count = 4;
+  uint32 model_rule_count = 5;
+}
+
+message ListVendorProfilesResponse {
+  repeated VendorProfileSummary profiles = 1;
+}
+
+service NextDudeService {
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Logout(Empty) returns (Empty);
+
+  rpc Subscribe(SubscribeRequest) returns (stream StreamEvent);
+  rpc SaveUserPreferences(UserPreferences) returns (UserPreferences);
+
+  rpc SaveMap(NetworkMap) returns (NetworkMap);
+  rpc DeleteMap(IdRequest) returns (Empty);
+  rpc AutoLayoutMap(AutoLayoutRequest) returns (Empty);
+  rpc CopyPasteItems(CopyPasteRequest) returns (CopyPasteResponse);
+  rpc Undo(Empty) returns (UndoRedoResponse);
+  rpc Redo(Empty) returns (UndoRedoResponse);
+
+  rpc SaveDevice(Device) returns (Device);
+  rpc DeleteDevice(IdRequest) returns (Empty);
+
+  rpc SaveService(DeviceService) returns (DeviceService);
+  rpc DeleteService(IdRequest) returns (Empty);
+
+  rpc SaveProbe(ProbeDefinition) returns (ProbeDefinition);
+  rpc DeleteProbe(IdRequest) returns (Empty);
+
+  rpc SaveDeviceType(DeviceType) returns (DeviceType);
+  rpc DeleteDeviceType(IdRequest) returns (Empty);
+
+  rpc SaveLinkType(LinkType) returns (LinkType);
+  rpc DeleteLinkType(IdRequest) returns (Empty);
+
+  rpc SaveLink(NetworkLink) returns (NetworkLink);
+  rpc DeleteLink(IdRequest) returns (Empty);
+
+  rpc SaveNetwork(MapNetwork) returns (MapNetwork);
+  rpc DeleteNetwork(IdRequest) returns (Empty);
+
+  rpc SaveSubmap(SubmapItem) returns (SubmapItem);
+  rpc DeleteSubmap(IdRequest) returns (Empty);
+
+  rpc SaveStaticItem(StaticItem) returns (StaticItem);
+  rpc DeleteStaticItem(IdRequest) returns (Empty);
+
+  rpc SaveDependency(Dependency) returns (Dependency);
+  rpc DeleteDependency(IdRequest) returns (Empty);
+
+  rpc AcknowledgeAlert(AcknowledgeAlertRequest) returns (Empty);
+  rpc SaveAlertRule(AlertRule) returns (AlertRule);
+  rpc DeleteAlertRule(IdRequest) returns (Empty);
+
+  rpc SaveMaintenanceWindow(MaintenanceWindow) returns (MaintenanceWindow);
+  rpc DeleteMaintenanceWindow(IdRequest) returns (Empty);
+
+  rpc SaveNotificationChannel(NotificationChannel) returns (NotificationChannel);
+  rpc DeleteNotificationChannel(IdRequest) returns (Empty);
+  rpc TestNotificationChannel(IdRequest) returns (Empty);
+
+  rpc StartDiscovery(StartDiscoveryRequest) returns (StartDiscoveryResponse);
+  rpc CancelDiscovery(StartDiscoveryResponse) returns (Empty);
+  rpc ImportDiscoveryCandidates(ImportDiscoveryRequest) returns (ImportDiscoveryResponse);
+
+  rpc RunTool(RunToolRequest) returns (stream ToolOutputChunk);
+
+  rpc SaveChart(ChartDefinition) returns (ChartDefinition);
+  rpc DeleteChart(IdRequest) returns (Empty);
+  rpc QueryChartSeries(QueryChartSeriesRequest) returns (QueryChartSeriesResponse);
+
+  rpc QueryEvents(PageQueryRequest) returns (QueryEventsResponse);
+  rpc QuerySyslog(PageQueryRequest) returns (QuerySyslogResponse);
+  rpc QueryTraps(PageQueryRequest) returns (QueryTrapsResponse);
+  rpc QueryOutages(PageQueryRequest) returns (QueryOutagesResponse);
+  rpc QueryHistoryActions(PageQueryRequest) returns (QueryHistoryActionsResponse);
+
+  rpc UploadImage(UploadImageRequest) returns (ImageAssetMeta);
+  rpc ImportImageFromUrl(ImportImageUrlRequest) returns (ImageAssetMeta);
+  rpc DeleteImage(IdRequest) returns (Empty);
+  rpc GetImageBlob(GetImageBlobRequest) returns (GetImageBlobResponse);
+
+  rpc ListAdmins(Empty) returns (ListAdminsResponse);
+  rpc SaveAdmin(AdminUser) returns (AdminUser);
+  rpc DeleteAdmin(IdRequest) returns (Empty);
+  rpc SaveAdminGroup(AdminGroup) returns (AdminGroup);
+  rpc DeleteAdminGroup(IdRequest) returns (Empty);
+  rpc ListActiveAdmins(Empty) returns (ListActiveAdminsResponse);
+  rpc KickAdminSession(KickSessionRequest) returns (Empty);
+
+  rpc GetServerSettings(Empty) returns (ServerSettings);
+  rpc UpdateServerSettings(ServerSettings) returns (ServerSettings);
+  rpc ListVendorProfiles(Empty) returns (ListVendorProfilesResponse);
+}

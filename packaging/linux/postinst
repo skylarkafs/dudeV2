@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+
+if ! getent group nextdude >/dev/null 2>&1; then
+    groupadd --system nextdude
+fi
+
+if ! getent passwd nextdude >/dev/null 2>&1; then
+    useradd --system --gid nextdude --home-dir /var/lib/nextdude --shell /usr/sbin/nologin --comment "NextDude Monitoring Daemon" nextdude
+fi
+
+mkdir -p /var/lib/nextdude /var/log/nextdude /etc/nextdude/profiles
+chown -R nextdude:nextdude /var/lib/nextdude /var/log/nextdude
+chmod 0750 /var/lib/nextdude /var/log/nextdude
+if [ -f /etc/nextdude/server.toml ]; then
+    chown root:nextdude /etc/nextdude/server.toml
+    chmod 0640 /etc/nextdude/server.toml
+fi
+
+#DEBHELPER#
+exit 0

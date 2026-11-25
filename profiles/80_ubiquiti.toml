@@ -1,0 +1,25 @@
+id = "ubiquiti"
+name = "Ubiquiti airMAX / EdgeMAX / UniFi"
+vendor = "Ubiquiti"
+sys_object_id_prefixes = ["1.3.6.1.4.1.41112"]
+default_vendor_image_key = "radio"
+
+[[sensors]]
+name = "CPU Load (HOST-RESOURCES-MIB)"
+category = "cpu"
+oid = "1.3.6.1.2.1.25.3.3.1.2"
+scale = 1.0
+unit = "%"
+is_table = true
+
+[[model_rules]]
+descr_or_model_pattern = "airfiber"
+model_name = "airFiber Radio"
+image_key = "radio"
+device_type_name = "Radio"
+
+[[model_rules]]
+descr_or_model_pattern = "uap"
+model_name = "UniFi AP"
+image_key = "ap"
+device_type_name = "Access Point"

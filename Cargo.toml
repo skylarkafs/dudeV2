@@ -1,0 +1,96 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/common",
+    "crates/server",
+    "crates/client-core",
+    "crates/client",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "Apache-2.0"
+authors = ["NextDude Contributors"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_imports = "warn"
+unused_variables = "warn"
+dead_code = "warn"
+rust_2018_idioms = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "warn"
+
+[workspace.dependencies]
+tokio = { version = "1.41", features = ["full"] }
+tokio-stream = "0.1"
+tokio-util = "0.7"
+tonic = { version = "0.12.3", default-features = false, features = ["codegen", "prost", "transport", "router", "tls", "tls-roots", "gzip"] }
+tonic-build = { version = "0.12.3", default-features = false, features = ["prost", "transport"] }
+prost = "0.13.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+thiserror = "2.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std"] }
+tracing-appender = "0.2"
+ipnet = "2.10"
+bytes = "1.8"
+futures = "0.3"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+regex = "1.11"
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+zeroize = { version = "1.8", features = ["derive"] }
+rand = "0.8"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "logging", "tls12"] }
+rusqlite = { version = "0.32.1", features = ["bundled", "backup"] }
+argon2 = "0.5.3"
+chacha20poly1305 = "0.10.1"
+rcgen = "0.13"
+clap = { version = "4.5", features = ["derive"] }
+socket2 = { version = "0.5", features = ["all"] }
+hickory-resolver = { version = "0.24", features = ["tokio-runtime", "system-config"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+resvg = "0.45"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "ico"] }
+roxmltree = "0.20"
+md-5 = "0.10"
+sha1 = "0.10"
+hmac = "0.12"
+aes = "0.8"
+des = "0.8"
+cbc = "0.1"
+cfb-mode = "0.8"
+cipher = { version = "0.4", features = ["block-padding", "alloc"] }
+csv = "1.3"
+tracing-journald = "0.3"
+eframe = { version = "0.30.0", default-features = false, features = ["wgpu", "default_fonts"] }
+egui_plot = "0.30.0"
+tray-icon = "0.19"
+muda = "0.15"
+rfd = "0.15"
+arboard = "3.4"
+winresource = "0.1"
+windows-sys = "0.59"
+windows = "0.58"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "unwind"
+opt-level = 3

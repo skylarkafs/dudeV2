@@ -1,0 +1,64 @@
+# NextDude Server Configuration (/etc/nextdude/server.toml)
+
+# IP address and TCP port for gRPC-over-TLS 1.3 client connections.
+listen_addr = "0.0.0.0"
+grpc_port = 9443
+
+# Persistent state directory (SQLite WAL DB, master.key 0600, auto-generated TLS cert, images).
+data_dir = "/var/lib/nextdude"
+log_dir = "/var/log/nextdude"
+
+# Optional custom TLS certificate & private key paths (PEM).
+# If omitted, a self-signed certificate is generated on first launch for client TOFU pinning.
+# tls_cert_path = "/etc/nextdude/certs/server.crt.pem"
+# tls_key_path = "/etc/nextdude/certs/server.key.pem"
+
+# Vendor SNMP profile directories (override directory takes precedence by profile id).
+system_profiles_dir = "/usr/share/nextdude/profiles"
+override_profiles_dir = "/etc/nextdude/profiles"
+
+# Global monitoring scheduler settings (can be overridden per map and per device).
+global_poll_interval_sec = 30
+max_concurrent_probes = 256
+max_concurrent_per_host = 6
+flapping_changes = 5
+flapping_window_min = 10
+
+# Syslog UDP receiver (RFC 3164 / RFC 5424).
+syslog_enabled = true
+syslog_bind_addr = "0.0.0.0"
+syslog_port = 514
+syslog_queue_capacity = 8192
+# Optional external syslog forward target ("host:port"), leave empty to disable.
+syslog_forward_addr = ""
+
+# SNMP Trap / Inform UDP receiver (v1 / v2c / v3).
+trap_enabled = true
+trap_bind_addr = "0.0.0.0"
+trap_port = 162
+
+# MikroTik Neighbor Discovery Protocol (MNDP) UDP 5678 listener.
+mndp_enabled = true
+mndp_port = 5678
+
+# Lightweight read-only HTTP server status page (running children & server stats).
+# Defaults to loopback 127.0.0.1 for safety; set to 0.0.0.0 behind firewall/reverse-proxy if needed.
+status_web_enabled = true
+status_web_addr = "127.0.0.1"
+status_web_port = 9080
+
+# Image library security limits.
+allow_image_url_import = false
+max_image_upload_bytes = 2097152
+max_image_dimension_px = 2048
+
+# Data retention policies.
+retention_raw_hours = 48
+retention_rollup_days = 90
+retention_events_days = 180
+retention_syslog_days = 30
+retention_audit_days = 365
+
+# Admin login brute-force protection.
+login_max_attempts = 5
+login_lockout_sec = 300

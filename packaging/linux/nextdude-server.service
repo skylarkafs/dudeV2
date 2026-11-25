@@ -1,0 +1,30 @@
+[Unit]
+Description=NextDude Headless Network Monitoring Server
+Documentation=https://example.invalid/nextdude
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nextdude
+Group=nextdude
+ExecStart=/usr/bin/nextdude-server --config /etc/nextdude/server.toml run
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+AmbientCapabilities=CAP_NET_RAW CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/nextdude /var/log/nextdude
+
+[Install]
+WantedBy=multi-user.target
