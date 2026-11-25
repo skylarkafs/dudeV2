@@ -136,7 +136,7 @@ Supported targets: Windows 10 build 1809+ and Windows 11 (`x86_64`).
 
 1. **Visual Studio 2022 Build Tools** with **Desktop development with C++** (MSVC v143 + Windows 10/11 SDK).
 2. **Rustup** with target `x86_64-pc-windows-msvc` (stable `>= 1.80`).
-3. **Protocol Buffers compiler** (`protoc.exe` on `%PATH%`, e.g., via `winget install Google.Protobuf` or GitHub releases).
+3. **Protocol Buffers compiler**: Bundled automatically by `protoc-bin-vendored` (set `PROTOC` explicitly only if using a custom system `protoc.exe`).
 4. *(Optional for MSI)* **WiX Toolset v4** (`dotnet tool install --global wix`).
 
 ### 2.2 Building Binary and MSI Installer

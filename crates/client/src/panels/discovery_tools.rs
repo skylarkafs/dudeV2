@@ -1,7 +1,12 @@
+use crate::ui_kit::{
+    accent_rgb, card_frame, empty_state_card, pick_lang, section_heading, status_pill,
+    toolbar_frame,
+};
 use eframe::egui;
 use nextdude_client_core::connection::ClientCommand;
 use nextdude_client_core::i18n::{tr, Language, TextKey};
 use nextdude_client_core::state::ClientStateCache;
+use nextdude_client_core::theme::{RgbColor, ThemeMode};
 use nextdude_common::proto::v1;
 use std::collections::HashSet;
 use tokio::sync::mpsc;
@@ -51,58 +56,81 @@ impl Default for DiscoveryToolsState {
 pub fn render_discovery_panel(
     ui: &mut egui::Ui,
     lang: Language,
+    theme: ThemeMode,
     state: &ClientStateCache,
     dt: &mut DiscoveryToolsState,
     cmd_tx: &mpsc::Sender<ClientCommand>,
 ) {
-    ui.heading(tr(lang, TextKey::PanelDiscovery));
-    ui.horizontal_wrapped(|ui| {
-        ui.label("CIDR(s) comma-separated");
-        ui.text_edit_singleline(&mut dt.cidrs_text);
-        ui.label("Concurrency");
-        ui.add(egui::DragValue::new(&mut dt.concurrency).range(1..=128));
-        ui.label("Rate/s");
-        ui.add(egui::DragValue::new(&mut dt.rate_limit).range(1..=500));
-    });
-    ui.horizontal_wrapped(|ui| {
-        ui.label("SNMP Community (v2c)");
-        ui.add(egui::TextEdit::singleline(&mut dt.snmp_community).password(true));
-        ui.checkbox(&mut dt.include_mndp, "MNDP (UDP 5678)");
-        ui.checkbox(&mut dt.include_lldp_cdp, "LLDP / CDP");
-        if ui.button(tr(lang, TextKey::StartDiscovery)).clicked() {
-            let cidrs = dt
-                .cidrs_text
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect::<Vec<_>>();
-            let creds = if dt.snmp_community.is_empty() {
-                Vec::new()
-            } else {
-                vec![v1::SnmpCredential {
-                    version: v1::SnmpVersion::V2c as i32,
-                    port: 161,
-                    timeout_ms: 1500,
-                    retries: 0,
-                    community: Some(dt.snmp_community.clone()),
-                    ..Default::default()
-                }]
-            };
-            let _ = cmd_tx.try_send(ClientCommand::StartDiscovery(v1::StartDiscoveryRequest {
-                cidrs,
-                concurrency: dt.concurrency,
-                rate_limit_per_sec: dt.rate_limit,
-                credentials: creds,
-                include_mndp: dt.include_mndp,
-                include_lldp_cdp: dt.include_lldp_cdp,
-            }));
-        }
-        if let Some(ref prog) = state.discovery_progress {
-            if !prog.finished && ui.button(tr(lang, TextKey::CancelDiscovery)).clicked() {
-                let _ = cmd_tx.try_send(ClientCommand::CancelDiscovery(prog.job_id.clone()));
+    section_heading(
+        ui,
+        theme,
+        tr(lang, TextKey::PanelDiscovery),
+        Some(pick_lang(
+            lang,
+            "Pemindaian CIDR ICMP/SNMP serta tetangga LLDP/CDP/MNDP",
+            "ICMP/SNMP CIDR sweep with LLDP, CDP, and MNDP neighbor detection",
+        )),
+    );
+    ui.add_space(6.0);
+
+    card_frame(theme).show(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.label("CIDR(s)");
+            ui.add(
+                egui::TextEdit::singleline(&mut dt.cidrs_text)
+                    .hint_text("192.168.88.0/24, 10.0.0.0/24"),
+            );
+            ui.label("Concurrency");
+            ui.add(egui::DragValue::new(&mut dt.concurrency).range(1..=128));
+            ui.label("Rate/s");
+            ui.add(egui::DragValue::new(&mut dt.rate_limit).range(1..=500));
+        });
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label("SNMP Community (v2c)");
+            ui.add(egui::TextEdit::singleline(&mut dt.snmp_community).password(true));
+            ui.checkbox(&mut dt.include_mndp, "MNDP (UDP 5678)");
+            ui.checkbox(&mut dt.include_lldp_cdp, "LLDP / CDP");
+            let can_scan = !dt.cidrs_text.trim().is_empty() || dt.include_mndp;
+            if ui
+                .add_enabled(can_scan, egui::Button::new(tr(lang, TextKey::StartDiscovery)))
+                .clicked()
+            {
+                let cidrs = dt
+                    .cidrs_text
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>();
+                let creds = if dt.snmp_community.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![v1::SnmpCredential {
+                        version: v1::SnmpVersion::V2c as i32,
+                        port: 161,
+                        timeout_ms: 1500,
+                        retries: 0,
+                        community: Some(dt.snmp_community.clone()),
+                        ..Default::default()
+                    }]
+                };
+                let _ = cmd_tx.try_send(ClientCommand::StartDiscovery(v1::StartDiscoveryRequest {
+                    cidrs,
+                    concurrency: dt.concurrency,
+                    rate_limit_per_sec: dt.rate_limit,
+                    credentials: creds,
+                    include_mndp: dt.include_mndp,
+                    include_lldp_cdp: dt.include_lldp_cdp,
+                }));
             }
-        }
+            if let Some(ref prog) = state.discovery_progress {
+                if !prog.finished && ui.button(tr(lang, TextKey::CancelDiscovery)).clicked() {
+                    let _ = cmd_tx.try_send(ClientCommand::CancelDiscovery(prog.job_id.clone()));
+                }
+            }
+        });
     });
+    ui.add_space(6.0);
 
     if let Some(ref prog) = state.discovery_progress {
         let frac = if prog.total_hosts > 0 {
@@ -111,135 +139,214 @@ pub fn render_discovery_panel(
             1.0
         };
         ui.add(egui::ProgressBar::new(frac).text(&prog.status_text));
-        ui.separator();
-        ui.horizontal(|ui| {
-            let default_map = dt.target_map_id.or_else(|| state.maps.keys().next().copied());
-            dt.target_map_id = default_map;
-            egui::ComboBox::from_label("Target Map")
-                .selected_text(
-                    dt.target_map_id
-                        .and_then(|id| state.maps.get(&id))
-                        .map_or("Select Map", |m| m.name.as_str()),
-                )
-                .show_ui(ui, |ui| {
-                    for m in state.maps.values() {
-                        ui.selectable_value(&mut dt.target_map_id, Some(m.id), &m.name);
-                    }
-                });
-            ui.checkbox(&mut dt.import_links, "Import Links");
-            ui.checkbox(&mut dt.auto_layout, "Auto Layout");
-            if ui.button("Select New (Non-Dup)").clicked() {
-                dt.selected_candidates.clear();
-                for c in &prog.candidates {
-                    if !c.duplicate_existing {
-                        dt.selected_candidates.insert(c.temp_id.clone());
-                    }
-                }
-            }
-            if ui.button(tr(lang, TextKey::ImportSelected)).clicked() {
-                if let Some(mid) = dt.target_map_id {
-                    let _ = cmd_tx.try_send(ClientCommand::ImportDiscoveryCandidates(
-                        v1::ImportDiscoveryRequest {
-                            job_id: prog.job_id.clone(),
-                            target_map_id: mid,
-                            selected_temp_ids: dt.selected_candidates.iter().cloned().collect(),
-                            import_links: dt.import_links,
-                            auto_layout: dt.auto_layout,
-                        },
-                    ));
-                }
-            }
-        });
+        ui.add_space(6.0);
 
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            egui::Grid::new("disc_cands").striped(true).num_columns(6).show(ui, |ui| {
-                ui.strong("Sel");
-                ui.strong("IP");
-                ui.strong("sysName");
-                ui.strong(tr(lang, TextKey::Vendor));
-                ui.strong(tr(lang, TextKey::Model));
-                ui.strong("Duplicate?");
-                ui.end_row();
-                for c in &prog.candidates {
-                    let mut checked = dt.selected_candidates.contains(&c.temp_id);
-                    if ui.checkbox(&mut checked, "").changed() {
-                        if checked {
+        toolbar_frame(theme).show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                let default_map = dt.target_map_id.or_else(|| state.maps.keys().next().copied());
+                dt.target_map_id = default_map;
+                egui::ComboBox::from_label("Target Map")
+                    .selected_text(
+                        dt.target_map_id
+                            .and_then(|id| state.maps.get(&id))
+                            .map_or("Select Map", |m| m.name.as_str()),
+                    )
+                    .show_ui(ui, |ui| {
+                        for m in state.maps.values() {
+                            ui.selectable_value(&mut dt.target_map_id, Some(m.id), &m.name);
+                        }
+                    });
+                ui.checkbox(&mut dt.import_links, "Import Links");
+                ui.checkbox(&mut dt.auto_layout, "Auto Layout");
+                if ui.button("Select New (Non-Dup)").clicked() {
+                    dt.selected_candidates.clear();
+                    for c in &prog.candidates {
+                        if !c.duplicate_existing {
                             dt.selected_candidates.insert(c.temp_id.clone());
-                        } else {
-                            dt.selected_candidates.remove(&c.temp_id);
                         }
                     }
-                    ui.label(&c.ip);
-                    ui.label(&c.sys_name);
-                    ui.label(&c.vendor);
-                    ui.label(&c.model);
-                    ui.label(if c.duplicate_existing { "Existing" } else { "New" });
-                    ui.end_row();
+                }
+                let can_import = !dt.selected_candidates.is_empty() && dt.target_map_id.is_some();
+                if ui
+                    .add_enabled(can_import, egui::Button::new(tr(lang, TextKey::ImportSelected)))
+                    .clicked()
+                {
+                    if let Some(mid) = dt.target_map_id {
+                        let _ = cmd_tx.try_send(ClientCommand::ImportDiscoveryCandidates(
+                            v1::ImportDiscoveryRequest {
+                                job_id: prog.job_id.clone(),
+                                target_map_id: mid,
+                                selected_temp_ids: dt.selected_candidates.iter().cloned().collect(),
+                                import_links: dt.import_links,
+                                auto_layout: dt.auto_layout,
+                            },
+                        ));
+                    }
                 }
             });
         });
+        ui.add_space(6.0);
+
+        card_frame(theme).show(ui, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                egui::Grid::new("disc_cands")
+                    .striped(true)
+                    .spacing([12.0, 6.0])
+                    .num_columns(6)
+                    .show(ui, |ui| {
+                        ui.strong("Sel");
+                        ui.strong("IP");
+                        ui.strong("sysName");
+                        ui.strong(tr(lang, TextKey::Vendor));
+                        ui.strong(tr(lang, TextKey::Model));
+                        ui.strong("Status");
+                        ui.end_row();
+                        for c in &prog.candidates {
+                            let mut checked = dt.selected_candidates.contains(&c.temp_id);
+                            if ui.checkbox(&mut checked, "").changed() {
+                                if checked {
+                                    dt.selected_candidates.insert(c.temp_id.clone());
+                                } else {
+                                    dt.selected_candidates.remove(&c.temp_id);
+                                }
+                            }
+                            ui.monospace(&c.ip);
+                            ui.strong(&c.sys_name);
+                            ui.label(&c.vendor);
+                            ui.label(&c.model);
+                            if c.duplicate_existing {
+                                status_pill(ui, "Existing", RgbColor::new(245, 158, 11));
+                            } else {
+                                status_pill(ui, "New", accent_rgb(theme));
+                            }
+                            ui.end_row();
+                        }
+                    });
+            });
+        });
+    } else {
+        empty_state_card(
+            ui,
+            theme,
+            pick_lang(lang, "Siap memindai jaringan", "Ready to scan network"),
+            pick_lang(
+                lang,
+                "Masukkan satu atau beberapa subnet CIDR lalu klik Mulai Pemindaian.",
+                "Enter one or more CIDR ranges above and start a scan. Discovered devices are reviewed before import.",
+            ),
+        );
     }
 }
 
 pub fn render_tools_panel(
     ui: &mut egui::Ui,
     lang: Language,
+    theme: ThemeMode,
     state: &ClientStateCache,
     dt: &mut DiscoveryToolsState,
     cmd_tx: &mpsc::Sender<ClientCommand>,
 ) {
-    ui.heading(tr(lang, TextKey::PanelTools));
-    ui.horizontal_wrapped(|ui| {
-        egui::ComboBox::from_label("Tool")
-            .selected_text(format!("{:?}", dt.tool_kind))
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut dt.tool_kind, v1::ToolKind::Ping, "Ping");
-                ui.selectable_value(&mut dt.tool_kind, v1::ToolKind::Traceroute, "Traceroute");
-                ui.selectable_value(&mut dt.tool_kind, v1::ToolKind::SnmpGet, "SNMP Get");
-                ui.selectable_value(&mut dt.tool_kind, v1::ToolKind::SnmpWalk, "SNMP Walk");
-                ui.selectable_value(&mut dt.tool_kind, v1::ToolKind::TcpCheck, "TCP Port Check");
-                ui.selectable_value(&mut dt.tool_kind, v1::ToolKind::DnsLookup, "DNS Lookup");
-            });
-        egui::ComboBox::from_label("Device (optional)")
-            .selected_text(
-                dt.tool_device_id
-                    .and_then(|id| state.devices.get(&id))
-                    .map_or("Custom Target", |d| d.name.as_str()),
-            )
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut dt.tool_device_id, None, "Custom Target");
-                for d in state.devices.values() {
-                    if ui.selectable_value(&mut dt.tool_device_id, Some(d.id), &d.name).clicked() {
-                        dt.tool_target = d.address.clone();
+    section_heading(
+        ui,
+        theme,
+        tr(lang, TextKey::PanelTools),
+        Some(pick_lang(
+            lang,
+            "Diagnostik jaringan langsung dijalankan dari server Linux",
+            "Server-side diagnostic tools streamed live",
+        )),
+    );
+    ui.add_space(6.0);
+
+    toolbar_frame(theme).show(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            let tool_name = match dt.tool_kind {
+                v1::ToolKind::Ping => "Ping",
+                v1::ToolKind::Traceroute => "Traceroute",
+                v1::ToolKind::SnmpGet => "SNMP Get",
+                v1::ToolKind::SnmpWalk => "SNMP Walk",
+                v1::ToolKind::TcpCheck => "TCP Port Check",
+                v1::ToolKind::DnsLookup => "DNS Lookup",
+                _ => "Ping",
+            };
+            egui::ComboBox::from_label("Tool")
+                .selected_text(tool_name)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut dt.tool_kind, v1::ToolKind::Ping, "Ping");
+                    ui.selectable_value(&mut dt.tool_kind, v1::ToolKind::Traceroute, "Traceroute");
+                    ui.selectable_value(&mut dt.tool_kind, v1::ToolKind::SnmpGet, "SNMP Get");
+                    ui.selectable_value(&mut dt.tool_kind, v1::ToolKind::SnmpWalk, "SNMP Walk");
+                    ui.selectable_value(&mut dt.tool_kind, v1::ToolKind::TcpCheck, "TCP Port Check");
+                    ui.selectable_value(&mut dt.tool_kind, v1::ToolKind::DnsLookup, "DNS Lookup");
+                });
+            egui::ComboBox::from_label("Device")
+                .selected_text(
+                    dt.tool_device_id
+                        .and_then(|id| state.devices.get(&id))
+                        .map_or("Custom Target", |d| d.name.as_str()),
+                )
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut dt.tool_device_id, None, "Custom Target");
+                    for d in state.devices.values() {
+                        if ui
+                            .selectable_value(&mut dt.tool_device_id, Some(d.id), &d.name)
+                            .clicked()
+                        {
+                            dt.tool_target = d.address.clone();
+                        }
                     }
-                }
-            });
-        ui.label("Target");
-        ui.text_edit_singleline(&mut dt.tool_target);
-        if dt.tool_kind == v1::ToolKind::TcpCheck {
-            ui.label("Port");
-            ui.add(egui::DragValue::new(&mut dt.tool_port).range(1..=65535));
-        }
-        if matches!(dt.tool_kind, v1::ToolKind::SnmpGet | v1::ToolKind::SnmpWalk) {
-            ui.label("OID");
-            ui.text_edit_singleline(&mut dt.tool_oid);
-        }
-        if ui.button(tr(lang, TextKey::RunTool)).clicked() {
-            dt.tool_output.clear();
-            let _ = cmd_tx.try_send(ClientCommand::RunTool(v1::RunToolRequest {
-                kind: dt.tool_kind as i32,
-                target: dt.tool_target.clone(),
-                port: dt.tool_port,
-                oid: dt.tool_oid.clone(),
-                device_id: dt.tool_device_id,
-                count: 5,
-            }));
-        }
+                });
+            ui.label("Target");
+            ui.text_edit_singleline(&mut dt.tool_target);
+            if dt.tool_kind == v1::ToolKind::TcpCheck {
+                ui.label("Port");
+                ui.add(egui::DragValue::new(&mut dt.tool_port).range(1..=65535));
+            }
+            if matches!(dt.tool_kind, v1::ToolKind::SnmpGet | v1::ToolKind::SnmpWalk) {
+                ui.label("OID");
+                ui.text_edit_singleline(&mut dt.tool_oid);
+            }
+            let can_run = !dt.tool_target.trim().is_empty();
+            if ui
+                .add_enabled(can_run, egui::Button::new(tr(lang, TextKey::RunTool)))
+                .clicked()
+            {
+                dt.tool_output.clear();
+                let _ = cmd_tx.try_send(ClientCommand::RunTool(v1::RunToolRequest {
+                    kind: dt.tool_kind as i32,
+                    target: dt.tool_target.trim().to_string(),
+                    port: dt.tool_port,
+                    oid: dt.tool_oid.clone(),
+                    device_id: dt.tool_device_id,
+                    count: 5,
+                }));
+            }
+            if !dt.tool_output.is_empty()
+                && ui
+                    .button(pick_lang(lang, "Bersihkan", "Clear"))
+                    .clicked()
+            {
+                dt.tool_output.clear();
+            }
+        });
     });
-    ui.separator();
-    egui::ScrollArea::vertical().stick_to_bottom(true).show(ui, |ui| {
-        for line in &dt.tool_output {
-            ui.monospace(line);
+    ui.add_space(6.0);
+
+    card_frame(theme).show(ui, |ui| {
+        if dt.tool_output.is_empty() {
+            ui.label(pick_lang(
+                lang,
+                "Pilih tool dan masukkan IP/hostname target lalu klik Jalankan.",
+                "Pick a diagnostic tool, enter target IP/hostname, and click Run.",
+            ));
+        } else {
+            egui::ScrollArea::vertical()
+                .stick_to_bottom(true)
+                .show(ui, |ui| {
+                    for line in &dt.tool_output {
+                        ui.monospace(line);
+                    }
+                });
         }
     });
 }

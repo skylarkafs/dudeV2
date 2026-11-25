@@ -9,9 +9,9 @@ use crate::panels::discovery_tools::{
 };
 use crate::panels::images::{render_images_panel, ImagesPanelState};
 use crate::panels::inventory::{
-    open_new_device_editor, render_device_types_panel, render_devices_panel,
-    render_link_types_panel, render_links_panel, render_networks_and_submaps, render_outages_panel,
-    render_probes_panel, render_services_panel, InventoryPanelState,
+    open_new_device_editor, render_device_editor_modal, render_device_types_panel,
+    render_devices_panel, render_link_types_panel, render_links_panel, render_networks_and_submaps,
+    render_outages_panel, render_probes_panel, render_services_panel, InventoryPanelState,
 };
 use crate::panels::loader::{connect_to_entry, render_loader_panel, LoaderPanelState};
 use crate::panels::observability::{
@@ -19,8 +19,10 @@ use crate::panels::observability::{
     ObservabilityPanelState,
 };
 use crate::panels::ActiveWorkspaceTab;
-use crate::platform::{
-    show_windows_toast, start_alarm_sound, stop_alarm_sound,
+use crate::platform::{show_windows_toast, start_alarm_sound, stop_alarm_sound};
+use crate::ui_kit::{
+    accent_rgb, apply_app_theme, card_frame, muted_color, notice_frame, pick_lang,
+    severity_pill, status_pill,
 };
 use eframe::egui;
 use muda::{Menu, MenuEvent, MenuItem};
@@ -28,9 +30,9 @@ use nextdude_client_core::config::ClientLocalConfig;
 use nextdude_client_core::connection::{
     spawn_client_worker, ClientCommand, ClientEvent, ClientWorkerHandle, ConnectionPhase,
 };
-use nextdude_client_core::i18n::{tr, TextKey};
+use nextdude_client_core::i18n::{tr, Language, TextKey};
 use nextdude_client_core::state::ClientStateCache;
-use nextdude_client_core::theme::ThemeMode;
+use nextdude_client_core::theme::{state_color, RgbColor, ThemeMode};
 use nextdude_common::proto::v1;
 use nextdude_common::APP_NAME;
 use resvg::tiny_skia::{Pixmap, Transform};
@@ -41,6 +43,7 @@ use tray_icon::{Icon as TrayIconImg, TrayIcon, TrayIconBuilder};
 
 pub struct NextDudeApp {
     local_cfg: ClientLocalConfig,
+    applied_theme: Option<ThemeMode>,
     worker: ClientWorkerHandle,
     phase: ConnectionPhase,
     state: ClientStateCache,
@@ -55,7 +58,9 @@ pub struct NextDudeApp {
     textures: HashMap<String, egui::TextureHandle>,
     requested_images: HashSet<String>,
     show_global_search: bool,
+    focus_global_search: bool,
     global_search_query: String,
+    show_help_dialog: bool,
     alarm_wav_buf: Option<Vec<u8>>,
     alarm_popup_open: bool,
     _tray_icon: Option<TrayIcon>,
@@ -63,6 +68,7 @@ pub struct NextDudeApp {
     tray_quit_id: Option<muda::MenuId>,
     allow_close: bool,
     current_admin_id: i64,
+    connected_server_label: String,
 }
 
 impl NextDudeApp {
@@ -77,6 +83,8 @@ impl NextDudeApp {
         });
         let worker = spawn_client_worker(local_cfg.known_fingerprints.clone(), repaint);
 
+        apply_app_theme(&cc.egui_ctx, local_cfg.theme);
+
         // Preload built-in geometric SVG icons into egui textures
         let mut textures = HashMap::new();
         preload_builtin_icons(&cc.egui_ctx, &mut textures);
@@ -84,8 +92,10 @@ impl NextDudeApp {
         // Setup Windows System Tray
         let (tray_icon, tray_open_id, tray_quit_id) = setup_tray(&icon_rgba);
 
+        let initial_theme = local_cfg.theme;
         let mut app = Self {
             local_cfg,
+            applied_theme: Some(initial_theme),
             worker,
             phase: ConnectionPhase::Disconnected,
             state: ClientStateCache::default(),
@@ -100,7 +110,9 @@ impl NextDudeApp {
             textures,
             requested_images: HashSet::new(),
             show_global_search: false,
+            focus_global_search: false,
             global_search_query: String::new(),
+            show_help_dialog: false,
             alarm_wav_buf: None,
             alarm_popup_open: false,
             _tray_icon: tray_icon,
@@ -108,12 +120,14 @@ impl NextDudeApp {
             tray_quit_id,
             allow_close: false,
             current_admin_id: 0,
+            connected_server_label: String::new(),
         };
 
         // Auto-connect to last server on startup if configured
         if app.local_cfg.auto_connect_last {
             if let Some(last_id) = app.local_cfg.last_server_id.clone() {
                 if let Some(srv) = app.local_cfg.servers.iter().find(|s| s.id == last_id).cloned() {
+                    app.connected_server_label = format!("{} ({}:{})", srv.name, srv.address, srv.port);
                     let mut cfg_copy = app.local_cfg.clone();
                     connect_to_entry(
                         srv,
@@ -137,22 +151,33 @@ impl NextDudeApp {
                 ClientEvent::PhaseChanged(p) => {
                     if p == ConnectionPhase::Disconnected {
                         stop_alarm_sound();
+                        self.connected_server_label.clear();
                     }
                     self.phase = p;
                 }
                 ClientEvent::TofuPrompt(decision) => {
                     self.loader_panel.pending_tofu = Some(decision);
+                    self.active_tab = ActiveWorkspaceTab::Loader;
                 }
                 ClientEvent::LoggedIn(resp) => {
                     self.current_admin_id = resp.admin_id;
                     self.loader_panel.status_banner =
                         format!("{} ({})", resp.username, resp.group_name);
+                    if let Some(ref last_id) = self.local_cfg.last_server_id {
+                        if let Some(srv) = self.local_cfg.servers.iter().find(|s| &s.id == last_id) {
+                            self.connected_server_label =
+                                format!("{} ({}:{})", srv.name, srv.address, srv.port);
+                        }
+                    }
                     self.active_tab = ActiveWorkspaceTab::Map;
                     if let Some(prefs) = resp.preferences {
                         self.map_canvas.active_map_id = prefs.last_map_id;
                         if let Ok(saved_tab) = serde_json::from_str::<serde_json::Value>(&prefs.panel_layout_json) {
                             if let Some(find_q) = saved_tab.get("map_find").and_then(|v| v.as_str()) {
                                 self.map_canvas.find_query = find_q.to_string();
+                            }
+                            if let Some(z) = saved_tab.get("zoom").and_then(|v| v.as_f64()) {
+                                self.map_canvas.zoom = (z as f32).clamp(0.15, 4.0);
                             }
                         }
                     }
@@ -260,16 +285,43 @@ impl NextDudeApp {
             },
         ));
     }
+
+    fn switch_to_tab(&mut self, tab: ActiveWorkspaceTab) {
+        self.active_tab = tab;
+        match tab {
+            ActiveWorkspaceTab::AdminsGroups if self.admin_panel.admins.is_empty() => {
+                let _ = self.worker.cmd_tx.try_send(ClientCommand::ListAdmins);
+            }
+            ActiveWorkspaceTab::ActiveAdmins => {
+                let _ = self.worker.cmd_tx.try_send(ClientCommand::ListActiveAdmins);
+            }
+            ActiveWorkspaceTab::HistoryActions if self.admin_panel.history_actions.is_empty() => {
+                let now = chrono::Utc::now().timestamp();
+                let _ = self.worker.cmd_tx.try_send(ClientCommand::QueryHistoryActions(
+                    v1::PageQueryRequest {
+                        start_utc: now - 30 * 86400,
+                        end_utc: now + 60,
+                        device_id: None,
+                        text_filter: String::new(),
+                        min_severity: None,
+                        limit: 200,
+                        offset: 0,
+                    },
+                ));
+            }
+            _ => {}
+        }
+    }
 }
 
 impl eframe::App for NextDudeApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_worker_events(ctx);
 
-        // Apply selected theme
-        match self.local_cfg.theme {
-            ThemeMode::Dark => ctx.set_visuals(egui::Visuals::dark()),
-            ThemeMode::Light => ctx.set_visuals(egui::Visuals::light()),
+        // Apply custom Slate/Cobalt NOC theme only when theme changes
+        if self.applied_theme != Some(self.local_cfg.theme) {
+            apply_app_theme(ctx, self.local_cfg.theme);
+            self.applied_theme = Some(self.local_cfg.theme);
         }
 
         // Handle System Tray Menu clicks
@@ -299,6 +351,7 @@ impl eframe::App for NextDudeApp {
         // Global Keyboard Shortcuts (Ctrl+K, Ctrl+Z, Ctrl+Y)
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::K)) {
             self.show_global_search = !self.show_global_search;
+            self.focus_global_search = self.show_global_search;
         }
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Z)) {
             let _ = self.worker.cmd_tx.try_send(ClientCommand::Undo);
@@ -308,61 +361,146 @@ impl eframe::App for NextDudeApp {
         }
 
         let lang = self.local_cfg.language;
+        let theme = self.local_cfg.theme;
 
-        // Top Menu Bar
+        // Top Menu & Status Bar
         egui::TopBottomPanel::top("top_menu_bar").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button(tr(lang, TextKey::MenuFile), |ui| {
                     if ui.button(tr(lang, TextKey::AppTitle)).clicked() {
-                        self.active_tab = ActiveWorkspaceTab::Loader;
+                        self.switch_to_tab(ActiveWorkspaceTab::Loader);
                         ui.close_menu();
                     }
                     if ui.button(tr(lang, TextKey::PanelClientSettings)).clicked() {
-                        self.active_tab = ActiveWorkspaceTab::ClientSettings;
+                        self.switch_to_tab(ActiveWorkspaceTab::ClientSettings);
                         ui.close_menu();
                     }
-                    if ui.button(tr(lang, TextKey::Disconnect)).clicked() {
+                    if ui
+                        .add_enabled(
+                            self.phase != ConnectionPhase::Disconnected,
+                            egui::Button::new(tr(lang, TextKey::Disconnect)),
+                        )
+                        .clicked()
+                    {
                         let _ = self.worker.cmd_tx.try_send(ClientCommand::Disconnect);
                         ui.close_menu();
                     }
-                    if ui.button("Exit").clicked() {
+                    ui.separator();
+                    if ui.button(pick_lang(lang, "Keluar", "Exit")).clicked() {
                         self.allow_close = true;
                         stop_alarm_sound();
                         self.save_preferences_to_server();
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
-                ui.menu_button(tr(lang, TextKey::MenuServer), |ui| {
-                    if ui.button(tr(lang, TextKey::PanelNotifications)).clicked() {
-                        self.active_tab = ActiveWorkspaceTab::Notifications;
+
+                ui.menu_button(tr(lang, TextKey::MenuMap), |ui| {
+                    if ui.button(pick_lang(lang, "Buka Peta Jaringan", "Open Network Map")).clicked() {
+                        self.switch_to_tab(ActiveWorkspaceTab::Map);
                         ui.close_menu();
                     }
-                    if ui.button(tr(lang, TextKey::PanelAdminsGroups)).clicked() {
-                        let _ = self.worker.cmd_tx.try_send(ClientCommand::ListAdmins);
-                        self.active_tab = ActiveWorkspaceTab::AdminsGroups;
+                    if ui.button(pick_lang(lang, "Peta Baru...", "New Map...")).clicked() {
+                        self.switch_to_tab(ActiveWorkspaceTab::Map);
+                        self.map_canvas.show_new_map_dialog = true;
+                        self.map_canvas.new_map_name.clear();
                         ui.close_menu();
                     }
-                    if ui.button(tr(lang, TextKey::PanelActiveAdmins)).clicked() {
-                        let _ = self.worker.cmd_tx.try_send(ClientCommand::ListActiveAdmins);
-                        self.active_tab = ActiveWorkspaceTab::ActiveAdmins;
+                    ui.separator();
+                    if ui.button(pick_lang(lang, "Perbesar (+)", "Zoom In (+)")).clicked() {
+                        self.map_canvas.zoom_in();
                         ui.close_menu();
                     }
-                    if ui.button(tr(lang, TextKey::PanelHistoryActions)).clicked() {
-                        self.active_tab = ActiveWorkspaceTab::HistoryActions;
+                    if ui.button(pick_lang(lang, "Perkecil (-)", "Zoom Out (-)")).clicked() {
+                        self.map_canvas.zoom_out();
                         ui.close_menu();
                     }
-                    if ui.button(tr(lang, TextKey::PanelServerSettings)).clicked() {
-                        self.active_tab = ActiveWorkspaceTab::ServerSettings;
+                    if ui.button(pick_lang(lang, "Reset Zoom (100%)", "Reset Zoom (100%)")).clicked() {
+                        self.map_canvas.reset_view();
+                        ui.close_menu();
+                    }
+                    if ui.button(pick_lang(lang, "Sesuaikan ke Layar", "Fit Map to Screen")).clicked() {
+                        self.switch_to_tab(ActiveWorkspaceTab::Map);
+                        self.map_canvas.fit_view_requested = true;
                         ui.close_menu();
                     }
                 });
+
+                ui.menu_button(tr(lang, TextKey::MenuServer), |ui| {
+                    if ui.button(tr(lang, TextKey::PanelNotifications)).clicked() {
+                        self.switch_to_tab(ActiveWorkspaceTab::Notifications);
+                        ui.close_menu();
+                    }
+                    if ui.button(tr(lang, TextKey::PanelAdminsGroups)).clicked() {
+                        self.switch_to_tab(ActiveWorkspaceTab::AdminsGroups);
+                        ui.close_menu();
+                    }
+                    if ui.button(tr(lang, TextKey::PanelActiveAdmins)).clicked() {
+                        self.switch_to_tab(ActiveWorkspaceTab::ActiveAdmins);
+                        ui.close_menu();
+                    }
+                    if ui.button(tr(lang, TextKey::PanelHistoryActions)).clicked() {
+                        self.switch_to_tab(ActiveWorkspaceTab::HistoryActions);
+                        ui.close_menu();
+                    }
+                    if ui.button(tr(lang, TextKey::PanelServerSettings)).clicked() {
+                        self.switch_to_tab(ActiveWorkspaceTab::ServerSettings);
+                        ui.close_menu();
+                    }
+                });
+
                 ui.menu_button(tr(lang, TextKey::MenuTools), |ui| {
                     if ui.button(tr(lang, TextKey::PanelDiscovery)).clicked() {
-                        self.active_tab = ActiveWorkspaceTab::Discovery;
+                        self.switch_to_tab(ActiveWorkspaceTab::Discovery);
                         ui.close_menu();
                     }
                     if ui.button(tr(lang, TextKey::PanelTools)).clicked() {
-                        self.active_tab = ActiveWorkspaceTab::Tools;
+                        self.switch_to_tab(ActiveWorkspaceTab::Tools);
+                        ui.close_menu();
+                    }
+                });
+
+                ui.menu_button(tr(lang, TextKey::MenuView), |ui| {
+                    let theme_btn = match self.local_cfg.theme {
+                        ThemeMode::Dark => tr(lang, TextKey::ThemeLight),
+                        ThemeMode::Light => tr(lang, TextKey::ThemeDark),
+                    };
+                    if ui.button(theme_btn).clicked() {
+                        self.local_cfg.theme = match self.local_cfg.theme {
+                            ThemeMode::Dark => ThemeMode::Light,
+                            ThemeMode::Light => ThemeMode::Dark,
+                        };
+                        let _ = self.local_cfg.save_to(&ClientLocalConfig::config_file_path());
+                        ui.close_menu();
+                    }
+                    let lang_btn = match self.local_cfg.language {
+                        Language::Id => "Language: English",
+                        Language::En => "Bahasa: Indonesia",
+                    };
+                    if ui.button(lang_btn).clicked() {
+                        self.local_cfg.language = match self.local_cfg.language {
+                            Language::Id => Language::En,
+                            Language::En => Language::Id,
+                        };
+                        let _ = self.local_cfg.save_to(&ClientLocalConfig::config_file_path());
+                        ui.close_menu();
+                    }
+                    if ui.button("Global Search (Ctrl+K)").clicked() {
+                        self.show_global_search = true;
+                        self.focus_global_search = true;
+                        ui.close_menu();
+                    }
+                });
+
+                ui.menu_button(tr(lang, TextKey::MenuHelp), |ui| {
+                    if ui
+                        .button(pick_lang(
+                            lang,
+                            "Pintasan Keyboard & Tentang",
+                            "Keyboard Shortcuts & About",
+                        ))
+                        .clicked()
+                    {
+                        self.show_help_dialog = true;
                         ui.close_menu();
                     }
                 });
@@ -378,57 +516,269 @@ impl eframe::App for NextDudeApp {
                     }
                     if ui.button("Ctrl+K").clicked() {
                         self.show_global_search = true;
+                        self.focus_global_search = true;
                     }
-                    let conn_label = match &self.phase {
-                        ConnectionPhase::Connected => tr(lang, TextKey::StatusConnected).to_string(),
-                        ConnectionPhase::Connecting => tr(lang, TextKey::StatusConnecting).to_string(),
-                        ConnectionPhase::Disconnected => tr(lang, TextKey::StatusDisconnected).to_string(),
-                        ConnectionPhase::Reconnecting(n) => format!("{} ({n})", tr(lang, TextKey::StatusReconnecting)),
+                    let (conn_label, conn_rgb) = match &self.phase {
+                        ConnectionPhase::Connected => (
+                            if self.connected_server_label.is_empty() {
+                                tr(lang, TextKey::StatusConnected).to_string()
+                            } else {
+                                format!(
+                                    "{} • {}",
+                                    tr(lang, TextKey::StatusConnected),
+                                    self.connected_server_label
+                                )
+                            },
+                            state_color(theme, v1::ProbeState::Up),
+                        ),
+                        ConnectionPhase::Connecting => (
+                            tr(lang, TextKey::StatusConnecting).to_string(),
+                            RgbColor::new(245, 158, 11),
+                        ),
+                        ConnectionPhase::Disconnected => (
+                            tr(lang, TextKey::StatusDisconnected).to_string(),
+                            state_color(theme, v1::ProbeState::Unknown),
+                        ),
+                        ConnectionPhase::Reconnecting(n) => (
+                            format!("{} ({n})", tr(lang, TextKey::StatusReconnecting)),
+                            RgbColor::new(245, 158, 11),
+                        ),
                     };
-                    ui.label(conn_label);
+                    status_pill(ui, &conn_label, conn_rgb);
                 });
             });
         });
 
-        // Left Dude-style Navigation Tree
-        egui::SidePanel::left("nav_sidebar").resizable(true).default_width(200.0).show(ctx, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                let items: &[(ActiveWorkspaceTab, TextKey)] = &[
-                    (ActiveWorkspaceTab::Loader, TextKey::Connect),
-                    (ActiveWorkspaceTab::Map, TextKey::TabMap),
-                    (ActiveWorkspaceTab::Devices, TextKey::PanelDevices),
-                    (ActiveWorkspaceTab::Services, TextKey::PanelServices),
-                    (ActiveWorkspaceTab::Probes, TextKey::PanelProbes),
-                    (ActiveWorkspaceTab::DeviceTypes, TextKey::PanelDeviceTypes),
-                    (ActiveWorkspaceTab::Links, TextKey::PanelLinks),
-                    (ActiveWorkspaceTab::LinkTypes, TextKey::PanelLinkTypes),
-                    (ActiveWorkspaceTab::Networks, TextKey::PanelNetworks),
-                    (ActiveWorkspaceTab::Submaps, TextKey::PanelSubmaps),
-                    (ActiveWorkspaceTab::Outages, TextKey::PanelOutages),
-                    (ActiveWorkspaceTab::Events, TextKey::PanelEvents),
-                    (ActiveWorkspaceTab::Syslog, TextKey::PanelSyslog),
-                    (ActiveWorkspaceTab::Traps, TextKey::PanelTraps),
-                    (ActiveWorkspaceTab::Charts, TextKey::PanelCharts),
-                    (ActiveWorkspaceTab::Discovery, TextKey::PanelDiscovery),
-                    (ActiveWorkspaceTab::Files, TextKey::PanelFiles),
-                    (ActiveWorkspaceTab::Tools, TextKey::PanelTools),
-                    (ActiveWorkspaceTab::HistoryActions, TextKey::PanelHistoryActions),
-                    (ActiveWorkspaceTab::ActiveAdmins, TextKey::PanelActiveAdmins),
-                    (ActiveWorkspaceTab::AdminsGroups, TextKey::PanelAdminsGroups),
-                    (ActiveWorkspaceTab::Notifications, TextKey::PanelNotifications),
-                    (ActiveWorkspaceTab::ServerSettings, TextKey::PanelServerSettings),
-                    (ActiveWorkspaceTab::ClientSettings, TextKey::PanelClientSettings),
-                ];
-                for &(tab, key) in items {
-                    if ui.selectable_label(self.active_tab == tab, tr(lang, key)).clicked() {
-                        self.active_tab = tab;
+        // Bottom Live Telemetry & Notice Bar
+        let mut dev_up = 0usize;
+        let mut dev_down = 0usize;
+        let mut dev_unreach = 0usize;
+        let mut dev_partial = 0usize;
+        for d in self.state.devices.values() {
+            match v1::ProbeState::try_from(d.aggregate_state).unwrap_or(v1::ProbeState::Unknown) {
+                v1::ProbeState::Up => dev_up += 1,
+                v1::ProbeState::Down => dev_down += 1,
+                v1::ProbeState::Unreachable => dev_unreach += 1,
+                v1::ProbeState::Partial => dev_partial += 1,
+                _ => {}
+            }
+        }
+        let active_outages = self
+            .state
+            .outages
+            .iter()
+            .filter(|o| o.ended_utc.is_none())
+            .count();
+
+        egui::TopBottomPanel::bottom("bottom_status_bar").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                if !self.loader_panel.status_banner.is_empty() {
+                    let is_err = self.loader_panel.status_banner.starts_with("Error:");
+                    let col = if is_err {
+                        state_color(theme, v1::ProbeState::Down)
+                    } else {
+                        accent_rgb(theme)
+                    };
+                    status_pill(ui, &self.loader_panel.status_banner, col);
+                    if ui.small_button("x").clicked() {
+                        self.loader_panel.status_banner.clear();
                     }
+                } else {
+                    ui.label(
+                        egui::RichText::new(format!("{APP_NAME} v{}", env!("CARGO_PKG_VERSION")))
+                            .small()
+                            .color(muted_color(theme)),
+                    );
                 }
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.monospace(format!("Zoom {:.0}%", self.map_canvas.zoom * 100.0));
+                    if self.state.syslog_stats.dropped_total > 0 {
+                        status_pill(
+                            ui,
+                            &format!("Syslog Drops: {}", self.state.syslog_stats.dropped_total),
+                            RgbColor::new(245, 158, 11),
+                        );
+                    }
+                    if active_outages > 0 {
+                        status_pill(
+                            ui,
+                            &format!("Outages: {active_outages}"),
+                            state_color(theme, v1::ProbeState::Down),
+                        );
+                    }
+                    if dev_partial > 0 {
+                        status_pill(
+                            ui,
+                            &format!("Partial: {dev_partial}"),
+                            state_color(theme, v1::ProbeState::Partial),
+                        );
+                    }
+                    if dev_unreach > 0 {
+                        status_pill(
+                            ui,
+                            &format!("Unreach: {dev_unreach}"),
+                            state_color(theme, v1::ProbeState::Unreachable),
+                        );
+                    }
+                    if dev_down > 0 {
+                        status_pill(
+                            ui,
+                            &format!("Down: {dev_down}"),
+                            state_color(theme, v1::ProbeState::Down),
+                        );
+                    }
+                    status_pill(
+                        ui,
+                        &format!("Up: {dev_up}"),
+                        state_color(theme, v1::ProbeState::Up),
+                    );
+                });
             });
         });
 
+        // Left Sectioned Navigation Sidebar
+        egui::SidePanel::left("nav_sidebar")
+            .resizable(true)
+            .default_width(214.0)
+            .min_width(180.0)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    let sections: &[(&str, &str, &[(ActiveWorkspaceTab, TextKey)])] = &[
+                        (
+                            "RUANG KERJA",
+                            "WORKSPACE",
+                            &[
+                                (ActiveWorkspaceTab::Loader, TextKey::Connect),
+                                (ActiveWorkspaceTab::Map, TextKey::TabMap),
+                            ],
+                        ),
+                        (
+                            "INVENTARIS",
+                            "INVENTORY",
+                            &[
+                                (ActiveWorkspaceTab::Devices, TextKey::PanelDevices),
+                                (ActiveWorkspaceTab::Services, TextKey::PanelServices),
+                                (ActiveWorkspaceTab::Probes, TextKey::PanelProbes),
+                                (ActiveWorkspaceTab::DeviceTypes, TextKey::PanelDeviceTypes),
+                                (ActiveWorkspaceTab::Links, TextKey::PanelLinks),
+                                (ActiveWorkspaceTab::LinkTypes, TextKey::PanelLinkTypes),
+                                (ActiveWorkspaceTab::Networks, TextKey::PanelNetworks),
+                                (ActiveWorkspaceTab::Submaps, TextKey::PanelSubmaps),
+                            ],
+                        ),
+                        (
+                            "OBSERVABILITAS",
+                            "OBSERVABILITY",
+                            &[
+                                (ActiveWorkspaceTab::Outages, TextKey::PanelOutages),
+                                (ActiveWorkspaceTab::Events, TextKey::PanelEvents),
+                                (ActiveWorkspaceTab::Syslog, TextKey::PanelSyslog),
+                                (ActiveWorkspaceTab::Traps, TextKey::PanelTraps),
+                                (ActiveWorkspaceTab::Charts, TextKey::PanelCharts),
+                            ],
+                        ),
+                        (
+                            "OPERASIONAL",
+                            "OPERATIONS",
+                            &[
+                                (ActiveWorkspaceTab::Discovery, TextKey::PanelDiscovery),
+                                (ActiveWorkspaceTab::Files, TextKey::PanelFiles),
+                                (ActiveWorkspaceTab::Tools, TextKey::PanelTools),
+                            ],
+                        ),
+                        (
+                            "ADMINISTRASI",
+                            "ADMINISTRATION",
+                            &[
+                                (ActiveWorkspaceTab::HistoryActions, TextKey::PanelHistoryActions),
+                                (ActiveWorkspaceTab::ActiveAdmins, TextKey::PanelActiveAdmins),
+                                (ActiveWorkspaceTab::AdminsGroups, TextKey::PanelAdminsGroups),
+                                (ActiveWorkspaceTab::Notifications, TextKey::PanelNotifications),
+                                (ActiveWorkspaceTab::ServerSettings, TextKey::PanelServerSettings),
+                                (ActiveWorkspaceTab::ClientSettings, TextKey::PanelClientSettings),
+                            ],
+                        ),
+                    ];
+
+                    let mut next_tab: Option<ActiveWorkspaceTab> = None;
+                    for (idx, &(sec_id, sec_en, items)) in sections.iter().enumerate() {
+                        if idx > 0 {
+                            ui.add_space(6.0);
+                        }
+                        ui.label(
+                            egui::RichText::new(pick_lang(lang, sec_id, sec_en))
+                                .small()
+                                .strong()
+                                .color(muted_color(theme)),
+                        );
+                        ui.add_space(2.0);
+                        for &(tab, key) in items {
+                            let badge = match tab {
+                                ActiveWorkspaceTab::Devices if !self.state.devices.is_empty() => {
+                                    Some(format!(" ({})", self.state.devices.len()))
+                                }
+                                ActiveWorkspaceTab::Outages if active_outages > 0 => {
+                                    Some(format!(" ({active_outages})"))
+                                }
+                                ActiveWorkspaceTab::Links if !self.state.links.is_empty() => {
+                                    Some(format!(" ({})", self.state.links.len()))
+                                }
+                                _ => None,
+                            };
+                            let label = match badge {
+                                Some(b) => format!("{}{b}", tr(lang, key)),
+                                None => tr(lang, key).to_string(),
+                            };
+                            if ui
+                                .add_sized(
+                                    [ui.available_width(), 24.0],
+                                    egui::SelectableLabel::new(self.active_tab == tab, label),
+                                )
+                                .clicked()
+                            {
+                                next_tab = Some(tab);
+                            }
+                        }
+                    }
+                    if let Some(tab) = next_tab {
+                        self.switch_to_tab(tab);
+                    }
+                });
+            });
+
         // Main Central Panel
         egui::CentralPanel::default().show(ctx, |ui| {
+            let show_disconnected_guard = self.phase == ConnectionPhase::Disconnected
+                && self.state.maps.is_empty()
+                && !matches!(
+                    self.active_tab,
+                    ActiveWorkspaceTab::Loader | ActiveWorkspaceTab::ClientSettings
+                );
+
+            if show_disconnected_guard {
+                notice_frame(theme, accent_rgb(theme)).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.strong(pick_lang(
+                            lang,
+                            "Belum terhubung ke server NextDude.",
+                            "Not connected to a NextDude server.",
+                        ));
+                        if ui
+                            .button(pick_lang(
+                                lang,
+                                "Buka Pengelola Koneksi",
+                                "Open Server Loader",
+                            ))
+                            .clicked()
+                        {
+                            self.switch_to_tab(ActiveWorkspaceTab::Loader);
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+            }
+
             let cmd_tx = &self.worker.cmd_tx;
             let requested = &mut self.requested_images;
             let mut request_img = |img_id: i64, variant: &str| {
@@ -446,6 +796,7 @@ impl eframe::App for NextDudeApp {
                     ui,
                     ctx,
                     lang,
+                    theme,
                     &self.phase,
                     &mut self.local_cfg,
                     &mut self.loader_panel,
@@ -459,7 +810,7 @@ impl eframe::App for NextDudeApp {
                         ui,
                         ctx,
                         lang,
-                        self.local_cfg.theme,
+                        theme,
                         &mut self.state,
                         &mut self.map_canvas,
                         &self.textures,
@@ -477,18 +828,40 @@ impl eframe::App for NextDudeApp {
                     }
                     if let Some(did) = self.map_canvas.open_device_dialog.take() {
                         if let Some(dev) = self.state.devices.get(&did).cloned() {
+                            self.inventory.edit_tags_csv = dev.tags.join(", ");
                             self.inventory.edit_device = Some(dev);
+                            self.inventory.edit_community.clear();
+                            self.inventory.edit_auth_pass.clear();
+                            self.inventory.edit_priv_pass.clear();
                         }
                     }
                     if let Some(lid) = self.map_canvas.open_link_dialog.take() {
                         if let Some(link) = self.state.links.get(&lid).cloned() {
                             self.inventory.edit_link = Some(link);
-                            self.active_tab = ActiveWorkspaceTab::Links;
+                            self.switch_to_tab(ActiveWorkspaceTab::Links);
                         }
                     }
-                    crate::panels::inventory::render_device_editor_modal(
+                    if let Some((did, tkind)) = self.map_canvas.open_tool_for_device.take() {
+                        if let Some(dev) = self.state.devices.get(&did) {
+                            self.discovery_tools.tool_kind = tkind;
+                            self.discovery_tools.tool_device_id = Some(dev.id);
+                            self.discovery_tools.tool_target = dev.address.clone();
+                            self.discovery_tools.tool_output.clear();
+                            let _ = cmd_tx.try_send(ClientCommand::RunTool(v1::RunToolRequest {
+                                kind: tkind as i32,
+                                target: dev.address.clone(),
+                                port: 0,
+                                oid: self.discovery_tools.tool_oid.clone(),
+                                device_id: Some(dev.id),
+                                count: 5,
+                            }));
+                            self.switch_to_tab(ActiveWorkspaceTab::Tools);
+                        }
+                    }
+                    render_device_editor_modal(
                         ctx,
                         lang,
+                        theme,
                         &self.state,
                         &mut self.inventory,
                         cmd_tx,
@@ -498,7 +871,7 @@ impl eframe::App for NextDudeApp {
                     ui,
                     ctx,
                     lang,
-                    self.local_cfg.theme,
+                    theme,
                     &self.state,
                     &self.local_cfg,
                     &mut self.inventory,
@@ -506,65 +879,116 @@ impl eframe::App for NextDudeApp {
                     cmd_tx,
                 ),
                 ActiveWorkspaceTab::Services => {
-                    render_services_panel(ui, lang, self.local_cfg.theme, &self.state, cmd_tx)
+                    render_services_panel(ui, lang, theme, &self.state, cmd_tx)
                 }
-                ActiveWorkspaceTab::Probes => {
-                    render_probes_panel(ui, ctx, lang, &self.state, &mut self.inventory, cmd_tx)
-                }
-                ActiveWorkspaceTab::DeviceTypes => {
-                    render_device_types_panel(ui, ctx, lang, &self.state, &mut self.inventory, cmd_tx)
-                }
-                ActiveWorkspaceTab::Links => {
-                    render_links_panel(ui, ctx, lang, &self.state, &mut self.inventory, cmd_tx)
-                }
-                ActiveWorkspaceTab::LinkTypes => {
-                    render_link_types_panel(ui, ctx, lang, &self.state, &mut self.inventory, cmd_tx)
-                }
+                ActiveWorkspaceTab::Probes => render_probes_panel(
+                    ui,
+                    ctx,
+                    lang,
+                    theme,
+                    &self.state,
+                    &mut self.inventory,
+                    cmd_tx,
+                ),
+                ActiveWorkspaceTab::DeviceTypes => render_device_types_panel(
+                    ui,
+                    ctx,
+                    lang,
+                    theme,
+                    &self.state,
+                    &mut self.inventory,
+                    cmd_tx,
+                ),
+                ActiveWorkspaceTab::Links => render_links_panel(
+                    ui,
+                    ctx,
+                    lang,
+                    theme,
+                    &self.state,
+                    &mut self.inventory,
+                    cmd_tx,
+                ),
+                ActiveWorkspaceTab::LinkTypes => render_link_types_panel(
+                    ui,
+                    ctx,
+                    lang,
+                    theme,
+                    &self.state,
+                    &mut self.inventory,
+                    cmd_tx,
+                ),
                 ActiveWorkspaceTab::Networks => {
-                    render_networks_and_submaps(ui, lang, &self.state, false, cmd_tx)
+                    render_networks_and_submaps(ui, lang, theme, &self.state, false, cmd_tx)
                 }
                 ActiveWorkspaceTab::Submaps => {
-                    render_networks_and_submaps(ui, lang, &self.state, true, cmd_tx)
+                    render_networks_and_submaps(ui, lang, theme, &self.state, true, cmd_tx)
                 }
-                ActiveWorkspaceTab::Outages => render_outages_panel(ui, lang, &self.state),
-                ActiveWorkspaceTab::Events => {
-                    render_events_panel(ui, lang, &self.state, &mut self.observability, cmd_tx)
-                }
-                ActiveWorkspaceTab::Syslog => {
-                    render_syslog_panel(ui, lang, &self.state, &mut self.observability)
-                }
-                ActiveWorkspaceTab::Traps => render_traps_panel(ui, lang, &self.state),
-                ActiveWorkspaceTab::Charts => {
-                    render_charts_panel(ui, ctx, lang, &self.state, &mut self.observability, cmd_tx)
-                }
-                ActiveWorkspaceTab::Discovery => {
-                    render_discovery_panel(ui, lang, &self.state, &mut self.discovery_tools, cmd_tx)
-                }
+                ActiveWorkspaceTab::Outages => render_outages_panel(ui, lang, theme, &self.state),
+                ActiveWorkspaceTab::Events => render_events_panel(
+                    ui,
+                    lang,
+                    theme,
+                    &self.state,
+                    &mut self.observability,
+                    cmd_tx,
+                ),
+                ActiveWorkspaceTab::Syslog => render_syslog_panel(
+                    ui,
+                    lang,
+                    theme,
+                    &self.state,
+                    &mut self.observability,
+                ),
+                ActiveWorkspaceTab::Traps => render_traps_panel(ui, lang, theme, &self.state),
+                ActiveWorkspaceTab::Charts => render_charts_panel(
+                    ui,
+                    ctx,
+                    lang,
+                    theme,
+                    &self.state,
+                    &mut self.observability,
+                    cmd_tx,
+                ),
+                ActiveWorkspaceTab::Discovery => render_discovery_panel(
+                    ui,
+                    lang,
+                    theme,
+                    &self.state,
+                    &mut self.discovery_tools,
+                    cmd_tx,
+                ),
                 ActiveWorkspaceTab::Files => render_images_panel(
                     ui,
                     ctx,
                     lang,
+                    theme,
                     &self.state,
                     &mut self.images_panel,
                     &self.textures,
                     cmd_tx,
                     &mut request_img,
                 ),
-                ActiveWorkspaceTab::Tools => {
-                    render_tools_panel(ui, lang, &self.state, &mut self.discovery_tools, cmd_tx)
-                }
+                ActiveWorkspaceTab::Tools => render_tools_panel(
+                    ui,
+                    lang,
+                    theme,
+                    &self.state,
+                    &mut self.discovery_tools,
+                    cmd_tx,
+                ),
                 ActiveWorkspaceTab::HistoryActions => {
-                    render_history_actions_panel(ui, lang, &self.admin_panel, cmd_tx)
+                    render_history_actions_panel(ui, lang, theme, &self.admin_panel, cmd_tx)
                 }
                 ActiveWorkspaceTab::ActiveAdmins => {
-                    render_active_admins_panel(ui, lang, &self.admin_panel, cmd_tx)
+                    render_active_admins_panel(ui, lang, theme, &self.admin_panel, cmd_tx)
                 }
                 ActiveWorkspaceTab::AdminsGroups => {
-                    render_admins_groups_panel(ui, lang, &mut self.admin_panel, cmd_tx)
+                    render_admins_groups_panel(ui, lang, theme, &mut self.admin_panel, cmd_tx)
                 }
                 ActiveWorkspaceTab::Notifications => render_notifications_panel(
                     ui,
                     lang,
+                    theme,
                     &self.state,
                     &mut self.admin_panel,
                     cmd_tx,
@@ -572,6 +996,7 @@ impl eframe::App for NextDudeApp {
                 ActiveWorkspaceTab::ServerSettings => render_server_settings_panel(
                     ui,
                     lang,
+                    theme,
                     &self.state,
                     &mut self.admin_panel,
                     cmd_tx,
@@ -587,33 +1012,81 @@ impl eframe::App for NextDudeApp {
         // Global Search Modal (Ctrl+K)
         if self.show_global_search {
             let mut open = true;
-            egui::Window::new("Global Search (Ctrl+K)").open(&mut open).show(ctx, |ui| {
-                ui.add(
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                open = false;
+            }
+            egui::Window::new(pick_lang(
+                lang,
+                "Pencarian Global (Ctrl+K)",
+                "Global Search (Ctrl+K)",
+            ))
+            .open(&mut open)
+            .resizable(true)
+            .min_width(440.0)
+            .show(ctx, |ui| {
+                let edit = ui.add(
                     egui::TextEdit::singleline(&mut self.global_search_query)
+                        .desired_width(f32::INFINITY)
                         .hint_text(tr(lang, TextKey::SearchGlobalPlaceholder)),
                 );
-                let q = self.global_search_query.to_ascii_lowercase();
-                if !q.is_empty() {
-                    for d in self.state.devices.values().take(30) {
-                        if d.name.to_ascii_lowercase().contains(&q) || d.address.contains(&q) {
-                            if ui.button(format!("[Device] {} ({})", d.name, d.address)).clicked() {
-                                self.map_canvas.active_map_id = Some(d.map_id);
-                                self.map_canvas.selected_devices.clear();
-                                self.map_canvas.selected_devices.insert(d.id);
-                                self.active_tab = ActiveWorkspaceTab::Map;
-                                self.show_global_search = false;
+                if self.focus_global_search {
+                    edit.request_focus();
+                    self.focus_global_search = false;
+                }
+                ui.add_space(6.0);
+                let q = self.global_search_query.trim().to_ascii_lowercase();
+                if q.is_empty() {
+                    ui.label(
+                        egui::RichText::new(pick_lang(
+                            lang,
+                            "Ketik nama perangkat, IP, atau nama peta...",
+                            "Type device name, IP address, or map name...",
+                        ))
+                        .small()
+                        .color(muted_color(theme)),
+                    );
+                } else {
+                    let mut count = 0usize;
+                    egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                        for d in self.state.devices.values() {
+                            if d.name.to_ascii_lowercase().contains(&q) || d.address.contains(&q) {
+                                count += 1;
+                                if ui
+                                    .button(format!("[Device] {} ({})", d.name, d.address))
+                                    .clicked()
+                                {
+                                    self.map_canvas.active_map_id = Some(d.map_id);
+                                    self.map_canvas.selected_devices.clear();
+                                    self.map_canvas.selected_devices.insert(d.id);
+                                    self.active_tab = ActiveWorkspaceTab::Map;
+                                    self.show_global_search = false;
+                                }
+                                if count >= 30 {
+                                    break;
+                                }
                             }
                         }
-                    }
-                    for m in self.state.maps.values() {
-                        if m.name.to_ascii_lowercase().contains(&q) {
-                            if ui.button(format!("[Map] {}", m.name)).clicked() {
-                                self.map_canvas.active_map_id = Some(m.id);
-                                self.active_tab = ActiveWorkspaceTab::Map;
-                                self.show_global_search = false;
+                        for m in self.state.maps.values() {
+                            if m.name.to_ascii_lowercase().contains(&q) {
+                                count += 1;
+                                if ui.button(format!("[Map] {}", m.name)).clicked() {
+                                    self.map_canvas.active_map_id = Some(m.id);
+                                    self.active_tab = ActiveWorkspaceTab::Map;
+                                    self.show_global_search = false;
+                                }
                             }
                         }
-                    }
+                        if count == 0 {
+                            ui.label(
+                                egui::RichText::new(pick_lang(
+                                    lang,
+                                    "Tidak ada hasil yang cocok.",
+                                    "No matching devices or maps.",
+                                ))
+                                .color(muted_color(theme)),
+                            );
+                        }
+                    });
                 }
             });
             if !open {
@@ -624,22 +1097,38 @@ impl eframe::App for NextDudeApp {
         // Active Alarm Popup + Sound Acknowledge
         if self.alarm_popup_open && !self.state.active_alarms.is_empty() {
             let mut ack_all = false;
-            egui::Window::new("Active Network Alarms")
-                .collapsible(false)
-                .show(ctx, |ui| {
-                    for alarm in self.state.active_alarms.iter().take(6) {
-                        ui.label(format!("[{}] {} — {}", alarm.device_name, alarm.title, alarm.description));
-                    }
-                    ui.horizontal(|ui| {
-                        if ui.button(tr(lang, TextKey::Acknowledge)).clicked() {
-                            ack_all = true;
-                        }
-                        if ui.button(tr(lang, TextKey::MuteAlarm)).clicked() {
-                            stop_alarm_sound();
-                            self.alarm_popup_open = false;
+            egui::Window::new(pick_lang(
+                lang,
+                "Alarm Jaringan Aktif",
+                "Active Network Alarms",
+            ))
+            .collapsible(false)
+            .min_width(460.0)
+            .show(ctx, |ui| {
+                card_frame(theme).show(ui, |ui| {
+                    egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
+                        for alarm in self.state.active_alarms.iter().take(10) {
+                            let sev = v1::Severity::try_from(alarm.severity)
+                                .unwrap_or(v1::Severity::Warning);
+                            ui.horizontal(|ui| {
+                                severity_pill(ui, lang, theme, sev);
+                                ui.strong(&alarm.device_name);
+                                ui.label(format!("— {}: {}", alarm.title, alarm.description));
+                            });
                         }
                     });
                 });
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button(tr(lang, TextKey::Acknowledge)).clicked() {
+                        ack_all = true;
+                    }
+                    if ui.button(tr(lang, TextKey::MuteAlarm)).clicked() {
+                        stop_alarm_sound();
+                        self.alarm_popup_open = false;
+                    }
+                });
+            });
             if ack_all {
                 stop_alarm_sound();
                 for alarm in self.state.active_alarms.drain(..) {
@@ -649,6 +1138,54 @@ impl eframe::App for NextDudeApp {
                         .try_send(ClientCommand::AcknowledgeAlert(alarm.event_id));
                 }
                 self.alarm_popup_open = false;
+            }
+        }
+
+        // Shortcuts & About Modal
+        if self.show_help_dialog {
+            let mut open = true;
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                open = false;
+            }
+            egui::Window::new(pick_lang(
+                lang,
+                "Pintasan & Informasi",
+                "Shortcuts & About",
+            ))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.strong(format!("{APP_NAME} Desktop Client v{}", env!("CARGO_PKG_VERSION")));
+                ui.label(
+                    egui::RichText::new(pick_lang(
+                        lang,
+                        "Seluruh polling dan konfigurasi tersimpan aman di server Linux.",
+                        "All probing, alerting, and layout state runs on the Linux server.",
+                    ))
+                    .color(muted_color(theme)),
+                );
+                ui.separator();
+                egui::Grid::new("shortcuts_help_grid")
+                    .num_columns(2)
+                    .spacing([16.0, 6.0])
+                    .show(ui, |ui| {
+                        ui.monospace("Ctrl + K");
+                        ui.label(pick_lang(lang, "Pencarian global", "Global search"));
+                        ui.end_row();
+                        ui.monospace("Ctrl + Z / Ctrl + Y");
+                        ui.label(pick_lang(lang, "Undo / Redo aksi peta", "Undo / Redo map actions"));
+                        ui.end_row();
+                        ui.monospace("Scroll / Middle Drag");
+                        ui.label(pick_lang(lang, "Zoom / Geser kanvas peta", "Zoom / Pan map canvas"));
+                        ui.end_row();
+                        ui.monospace("Delete / Esc");
+                        ui.label(pick_lang(lang, "Hapus item / Batal alat", "Delete selected / Cancel tool"));
+                        ui.end_row();
+                    });
+            });
+            if !open {
+                self.show_help_dialog = false;
             }
         }
     }

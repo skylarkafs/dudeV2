@@ -36,6 +36,7 @@ tokio-stream = "0.1"
 tokio-util = "0.7"
 tonic = { version = "0.12.3", default-features = false, features = ["codegen", "prost", "transport", "router", "tls", "tls-roots", "gzip"] }
 tonic-build = { version = "0.12.3", default-features = false, features = ["prost", "transport"] }
+protoc-bin-vendored = "3.3"
 prost = "0.13.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

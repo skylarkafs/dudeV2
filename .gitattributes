@@ -1,0 +1,22 @@
+# Enforce consistent line endings so Linux scripts & systemd units keep LF even on Windows
+* text=auto eol=lf
+
+*.rs text eol=lf
+*.toml text eol=lf
+*.proto text eol=lf
+*.md text eol=lf
+*.svg text eol=lf
+*.sh text eol=lf
+*.service text eol=lf
+packaging/linux/postinst text eol=lf
+packaging/linux/prerm text eol=lf
+packaging/linux/postrm text eol=lf
+
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.wxs text eol=crlf
+
+*.png binary
+*.ico binary
+*.webp binary
+*.jpg binary

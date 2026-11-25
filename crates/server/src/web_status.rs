@@ -700,34 +700,42 @@ pub fn build_status_html() -> &'static str {
   <style>
     :root {
       color-scheme: light dark;
-      --bg: #f8fafc;
+      --bg: #f1f5f9;
       --surface: #ffffff;
-      --border: #e2e8f0;
+      --surface-subtle: #f8fafc;
+      --border: #cbd5e1;
       --text: #0f172a;
       --muted: #475569;
       --ok: #15803d;
       --ok-bg: #dcfce7;
       --warn: #b45309;
       --warn-bg: #fef3c7;
+      --unreach: #c2410c;
       --down: #b91c1c;
       --down-bg: #fee2e2;
+      --unk: #64748b;
       --accent: #0284c7;
+      --accent-soft: #e0f2fe;
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --bg: #0b1120;
-        --surface: #111827;
-        --border: #1f2937;
-        --text: #f1f5f9;
+        --surface: #131c2e;
+        --surface-subtle: #182338;
+        --border: #26334a;
+        --text: #e2e8f0;
         --muted: #94a3b8;
         --ok: #4ade80;
         --ok-bg: #052e16;
         --warn: #fbbf24;
         --warn-bg: #451a03;
+        --unreach: #fb923c;
         --down: #f87171;
         --down-bg: #450a0a;
+        --unk: #64748b;
         --accent: #38bdf8;
+        --accent-soft: #0c4a6e;
       }
     }
     * { box-sizing: border-box; }
@@ -736,31 +744,48 @@ pub fn build_status_html() -> &'static str {
       background: var(--bg);
       color: var(--text);
       line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
     }
     .container {
-      max-width: 1080px;
+      max-width: 1120px;
       margin: 0 auto;
-      padding: 20px 16px 40px;
+      padding: 22px 18px 44px;
     }
     header {
       display: flex;
       flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 20px;
+      gap: 14px;
+      margin-bottom: 18px;
       padding-bottom: 14px;
       border-bottom: 1px solid var(--border);
     }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
     h1 {
       margin: 0;
-      font-size: 1.35rem;
-      letter-spacing: -0.01em;
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.015em;
     }
     .subtitle {
       margin: 2px 0 0;
       color: var(--muted);
-      font-size: 0.88rem;
+      font-size: 0.84rem;
     }
     .toolbar {
       display: flex;
@@ -771,32 +796,45 @@ pub fn build_status_html() -> &'static str {
     .badge {
       display: inline-flex;
       align-items: center;
-      padding: 3px 10px;
+      gap: 6px;
+      padding: 4px 10px;
       border-radius: 999px;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       font-weight: 600;
-      background: var(--border);
+      border: 1px solid var(--border);
+      background: var(--surface);
       color: var(--text);
     }
-    .badge-ok { background: var(--ok-bg); color: var(--ok); }
-    .badge-warn { background: var(--warn-bg); color: var(--warn); }
-    .badge-down { background: var(--down-bg); color: var(--down); }
-    button {
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .badge-ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+    .badge-warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+    .badge-down { background: var(--down-bg); color: var(--down); border-color: transparent; }
+    .btn, a.btn {
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
       padding: 6px 12px;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--surface);
       color: var(--text);
-      font-size: 0.85rem;
-      font-weight: 500;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: border-color 120ms ease, background-color 120ms ease;
     }
-    button:hover { border-color: var(--accent); }
+    .btn:hover { border-color: var(--accent); background: var(--surface-subtle); }
+    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .cards {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(225px, 1fr));
       gap: 12px;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
     .card {
       background: var(--surface);
@@ -804,20 +842,25 @@ pub fn build_status_html() -> &'static str {
       border-radius: 10px;
       padding: 14px 16px;
     }
+    .card-accent {
+      border-color: var(--accent);
+    }
     .card-label {
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.74rem;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
     }
     .card-value {
       margin-top: 6px;
-      font-size: 1.65rem;
+      font-size: 1.7rem;
       font-weight: 700;
+      line-height: 1.15;
       font-variant-numeric: tabular-nums;
     }
     .card-sub {
-      margin-top: 4px;
+      margin-top: 6px;
       font-size: 0.8rem;
       color: var(--muted);
       font-variant-numeric: tabular-nums;
@@ -827,42 +870,95 @@ pub fn build_status_html() -> &'static str {
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 16px;
-      margin-bottom: 18px;
+      margin-bottom: 16px;
+    }
+    .section-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
     }
     h2 {
-      margin: 0 0 12px;
-      font-size: 1rem;
+      margin: 0;
+      font-size: 0.98rem;
+      font-weight: 700;
+    }
+    .worker-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .chip {
+      font-size: 0.76rem;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 6px;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      font-variant-numeric: tabular-nums;
+    }
+    .health-bar-wrap {
+      margin-bottom: 14px;
+    }
+    .health-bar {
+      display: flex;
+      height: 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+    }
+    .seg-up { background: var(--ok); }
+    .seg-partial { background: var(--warn); }
+    .seg-unreach { background: var(--unreach); }
+    .seg-down { background: var(--down); }
+    .seg-unk { background: var(--unk); }
+    .health-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 8px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
     }
     .table-wrap { overflow-x: auto; }
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.88rem;
+      font-size: 0.86rem;
     }
     th, td {
       text-align: left;
-      padding: 8px 10px;
+      padding: 9px 10px;
       border-bottom: 1px solid var(--border);
       font-variant-numeric: tabular-nums;
     }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--surface-subtle); }
     th {
       color: var(--muted);
       font-weight: 600;
-      font-size: 0.8rem;
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-      gap: 10px 18px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 8px 20px;
       margin: 0;
     }
     .stat-row {
       display: flex;
       justify-content: space-between;
+      align-items: baseline;
       gap: 12px;
-      padding: 6px 0;
+      padding: 7px 0;
       border-bottom: 1px dashed var(--border);
-      font-size: 0.88rem;
+      font-size: 0.85rem;
     }
     .stat-row dt { color: var(--muted); }
     .stat-row dd {
@@ -885,24 +981,34 @@ pub fn build_status_html() -> &'static str {
 <body>
   <div class="container">
     <header>
-      <div>
-        <h1 id="page-title">NextDude Server Status</h1>
-        <p class="subtitle" id="page-meta">Read-only daemon health, running children &amp; aggregate telemetry</p>
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="9" opacity="0.4"></circle>
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 3v3M12 18v3M3 12h3M18 12h3"></path>
+          </svg>
+        </div>
+        <div>
+          <h1 id="page-title">NextDude Server Status</h1>
+          <p class="subtitle" id="page-meta">Daemon runtime, supervised children &amp; aggregate monitoring stats</p>
+        </div>
       </div>
       <div class="toolbar">
-        <span id="live-badge" class="badge" aria-live="polite">Connecting...</span>
-        <button id="toggle-auto" type="button">Pause Auto</button>
-        <button id="refresh-now" type="button">Refresh</button>
+        <span id="live-badge" class="badge" aria-live="polite"><span class="dot"></span><span>Connecting</span></span>
+        <button id="toggle-auto" class="btn" type="button">Pause Auto</button>
+        <button id="refresh-now" class="btn" type="button">Refresh</button>
+        <a class="btn mono" href="/api/stats">JSON</a>
       </div>
     </header>
 
     <noscript>
-      <section><p>JavaScript is disabled. Live JSON stats are available at <a href="/api/stats">/api/stats</a>.</p></section>
+      <section><p>JavaScript is disabled. Live JSON telemetry is served at <a href="/api/stats">/api/stats</a>.</p></section>
     </noscript>
 
     <main>
       <div class="cards">
-        <article class="card">
+        <article class="card card-accent">
           <div class="card-label">Children Running</div>
           <div class="card-value" id="kpi-children">-</div>
           <div class="card-sub" id="kpi-children-sub">-</div>
@@ -913,19 +1019,26 @@ pub fn build_status_html() -> &'static str {
           <div class="card-sub" id="kpi-uptime-sub">-</div>
         </article>
         <article class="card">
-          <div class="card-label">Server Memory &amp; Load</div>
+          <div class="card-label">Memory &amp; System Load</div>
           <div class="card-value" id="kpi-rss">-</div>
           <div class="card-sub" id="kpi-load-sub">-</div>
         </article>
         <article class="card">
-          <div class="card-label">Clients &amp; Devices</div>
+          <div class="card-label">Devices &amp; Client Sessions</div>
           <div class="card-value" id="kpi-devices">-</div>
           <div class="card-sub" id="kpi-clients-sub">-</div>
         </article>
       </div>
 
       <section aria-labelledby="children-heading">
-        <h2 id="children-heading">Running Children &amp; Worker Tasks</h2>
+        <div class="section-head">
+          <h2 id="children-heading">Running Children &amp; Worker Tasks</h2>
+          <div class="worker-pills">
+            <span class="chip" id="chip-probes">Probes: 0</span>
+            <span class="chip" id="chip-discovery">Discovery: 0</span>
+            <span class="chip" id="chip-tools">Tools: 0</span>
+          </div>
+        </div>
         <div class="table-wrap">
           <table>
             <caption class="sr-only">Supervised server child tasks and active worker counts</caption>
@@ -947,20 +1060,31 @@ pub fn build_status_html() -> &'static str {
       </section>
 
       <section aria-labelledby="stats-heading">
-        <h2 id="stats-heading">Server &amp; Monitoring Stats</h2>
+        <div class="section-head">
+          <h2 id="stats-heading">Server &amp; Monitoring Stats</h2>
+          <span class="chip mono" id="st-icmp-chip">ICMP: -</span>
+        </div>
+        <div class="health-bar-wrap">
+          <div class="health-bar" role="img" aria-label="Device status proportion">
+            <div id="bar-up" class="seg-up" style="width:0%"></div>
+            <div id="bar-partial" class="seg-partial" style="width:0%"></div>
+            <div id="bar-unreach" class="seg-unreach" style="width:0%"></div>
+            <div id="bar-down" class="seg-down" style="width:0%"></div>
+            <div id="bar-unk" class="seg-unk" style="width:100%"></div>
+          </div>
+          <div class="health-legend" id="health-legend">No monitored devices yet</div>
+        </div>
         <dl class="stats-grid">
           <div class="stat-row"><dt>Devices (Up / Down / Unreach / Partial)</dt><dd id="st-devices">-</dd></div>
           <div class="stat-row"><dt>Services (Total / Up / Down)</dt><dd id="st-services">-</dd></div>
           <div class="stat-row"><dt>Links (Total / Up / Down / Flapping)</dt><dd id="st-links">-</dd></div>
           <div class="stat-row"><dt>Maps / Dependencies / Active Outages</dt><dd id="st-topology">-</dd></div>
-          <div class="stat-row"><dt>Active Probe / Discovery / Tool Workers</dt><dd id="st-workers">-</dd></div>
           <div class="stat-row"><dt>Poll Cycles / Last Cycle Duration</dt><dd id="st-cycles">-</dd></div>
           <div class="stat-row"><dt>Syslog Received / Dropped</dt><dd id="st-syslog">-</dd></div>
           <div class="stat-row"><dt>SQLite DB + WAL Size</dt><dd id="st-db">-</dd></div>
           <div class="stat-row"><dt>Active Admin Sessions</dt><dd id="st-sessions">-</dd></div>
           <div class="stat-row"><dt>Total Child Panic/Restarts</dt><dd id="st-restarts">-</dd></div>
           <div class="stat-row"><dt>Ports (gRPC TLS / Status HTTP)</dt><dd id="st-ports">-</dd></div>
-          <div class="stat-row"><dt>ICMP Capability</dt><dd id="st-icmp">-</dd></div>
         </dl>
       </section>
     </main>
@@ -1002,6 +1126,44 @@ pub fn build_status_html() -> &'static str {
         if (el) el.textContent = text;
       }
 
+      function setLiveBadge(cls, text) {
+        const badge = document.getElementById("live-badge");
+        if (!badge) return;
+        badge.className = "badge " + cls;
+        const dot = document.createElement("span");
+        dot.className = "dot";
+        const lbl = document.createElement("span");
+        lbl.textContent = text;
+        badge.replaceChildren(dot, lbl);
+      }
+
+      function renderHealthBar(m) {
+        const tot = Number(m.devices_total || 0);
+        if (tot <= 0) {
+          document.getElementById("bar-up").style.width = "0%";
+          document.getElementById("bar-partial").style.width = "0%";
+          document.getElementById("bar-unreach").style.width = "0%";
+          document.getElementById("bar-down").style.width = "0%";
+          document.getElementById("bar-unk").style.width = "100%";
+          setText("health-legend", "No monitored devices registered yet");
+          return;
+        }
+        const pct = (n) => ((Number(n || 0) / tot) * 100).toFixed(2) + "%";
+        document.getElementById("bar-up").style.width = pct(m.devices_up);
+        document.getElementById("bar-partial").style.width = pct(m.devices_partial);
+        document.getElementById("bar-unreach").style.width = pct(m.devices_unreachable);
+        document.getElementById("bar-down").style.width = pct(m.devices_down);
+        document.getElementById("bar-unk").style.width = pct(m.devices_unknown);
+        setText(
+          "health-legend",
+          "Up " + m.devices_up +
+            " | Partial " + m.devices_partial +
+            " | Unreachable " + m.devices_unreachable +
+            " | Down " + m.devices_down +
+            " | Unknown " + m.devices_unknown
+        );
+      }
+
       function renderChildrenTable(children) {
         const tbody = document.getElementById("children-tbody");
         if (!tbody) return;
@@ -1026,7 +1188,14 @@ pub fn build_status_html() -> &'static str {
           tdState.appendChild(pill);
 
           const tdRestarts = document.createElement("td");
-          tdRestarts.textContent = String(child.restarts);
+          if (child.restarts > 0) {
+            const rp = document.createElement("span");
+            rp.className = "badge badge-warn";
+            rp.textContent = String(child.restarts);
+            tdRestarts.appendChild(rp);
+          } else {
+            tdRestarts.textContent = "0";
+          }
 
           const tdStarted = document.createElement("td");
           tdStarted.className = "mono";
@@ -1079,7 +1248,15 @@ pub fn build_status_html() -> &'static str {
           data.active_client_sessions + " active client session(s) | " + m.active_outages + " outage(s)"
         );
 
+        setText("chip-probes", "Probes: " + data.active_probe_tasks);
+        setText(
+          "chip-discovery",
+          "Discovery: " + data.active_discovery_tasks + " (cached " + data.discovery_jobs_cached + ")"
+        );
+        setText("chip-tools", "Tools: " + data.active_tool_tasks);
+
         renderChildrenTable(data.children || []);
+        renderHealthBar(m);
 
         setText(
           "st-devices",
@@ -1091,11 +1268,6 @@ pub fn build_status_html() -> &'static str {
           m.links_total + " / " + m.links_up + " / " + m.links_down + " / " + m.links_flapping
         );
         setText("st-topology", m.maps_total + " / " + m.dependencies_total + " / " + m.active_outages);
-        setText(
-          "st-workers",
-          data.active_probe_tasks + " / " + data.active_discovery_tasks + " (cached " +
-            data.discovery_jobs_cached + ") / " + data.active_tool_tasks
-        );
         setText("st-cycles", data.poll_cycles_total + " / " + data.last_poll_cycle_ms + " ms");
         setText("st-syslog", data.syslog_received + " / " + data.syslog_dropped);
         setText(
@@ -1105,14 +1277,13 @@ pub fn build_status_html() -> &'static str {
         setText("st-sessions", String(data.active_client_sessions));
         setText("st-restarts", String(data.total_child_restarts));
         setText("st-ports", data.grpc_port + " / " + data.status_web_port);
-        setText("st-icmp", data.icmp_mode || "-");
+        setText("st-icmp-chip", "ICMP: " + (data.icmp_mode || "-"));
       }
 
       async function fetchStats() {
         if (inFlight) inFlight.abort();
         inFlight = new AbortController();
         const timeoutId = setTimeout(() => inFlight.abort(), 3500);
-        const badge = document.getElementById("live-badge");
         try {
           const resp = await fetch("/api/stats", {
             signal: inFlight.signal,
@@ -1121,16 +1292,10 @@ pub fn build_status_html() -> &'static str {
           if (!resp.ok) throw new Error("HTTP " + resp.status);
           const data = await resp.json();
           renderSnapshot(data);
-          if (badge) {
-            badge.className = "badge badge-ok";
-            badge.textContent = "Live";
-          }
+          setLiveBadge(autoRefresh ? "badge-ok" : "badge-warn", autoRefresh ? "Live" : "Paused");
         } catch (err) {
           if (err && err.name === "AbortError") return;
-          if (badge) {
-            badge.className = "badge badge-down";
-            badge.textContent = "Disconnected";
-          }
+          setLiveBadge("badge-down", "Disconnected");
         } finally {
           clearTimeout(timeoutId);
         }
@@ -1150,6 +1315,7 @@ pub fn build_status_html() -> &'static str {
           toggleBtn.addEventListener("click", () => {
             autoRefresh = !autoRefresh;
             toggleBtn.textContent = autoRefresh ? "Pause Auto" : "Resume Auto";
+            setLiveBadge(autoRefresh ? "badge-ok" : "badge-warn", autoRefresh ? "Live" : "Paused");
             scheduleNext();
           });
         }

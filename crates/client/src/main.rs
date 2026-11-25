@@ -6,6 +6,7 @@ mod map_canvas;
 mod panels;
 #[allow(unsafe_code)]
 mod platform;
+mod ui_kit;
 
 use eframe::egui;
 use eframe::egui_wgpu::{WgpuConfiguration, WgpuSetup, WgpuSetupCreateNew};

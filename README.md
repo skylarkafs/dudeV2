@@ -70,7 +70,7 @@ For detailed internals, data flows, schema overview, and concurrency guarantees,
 | Component | Linux Server (`nextdude-server`) | Windows Client (`nextdude-client`) |
 |---|---|---|
 | Rust Toolchain | Rust stable (`>= 1.80`) | Rust stable (`>= 1.80`, `x86_64-pc-windows-msvc`) |
-| Protobuf Compiler | `protobuf-compiler` (`protoc` in `PATH`) | `protoc.exe` in `PATH` |
+| Protobuf Compiler | Bundled via `protoc-bin-vendored` (or `PROTOC=/usr/bin/protoc`) | Bundled via `protoc-bin-vendored` (or `protoc.exe` via `PROTOC`) |
 | System Libraries | `pkg-config` (bundled SQLite via `rusqlite`) | Visual Studio Build Tools (MSVC C++ workload) |
 | Packaging (Optional) | `cargo-deb`, `systemd` | WiX Toolset v4 (`wix`) |
 
@@ -138,8 +138,8 @@ Because command execution in the authoring environment failed (`powershell` exec
    - Run `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` on both Linux (`nextdude-server`) and Windows (`nextdude-client`).
 2. **Linux ICMP Socket (`SOCK_DGRAM` vs `SOCK_RAW`) Behavior**:
    - Verify `tokio::net::UdpSocket::from_std` wrapping `socket2` `Type::RAW` (`IPPROTO_ICMP` / `IPPROTO_ICMPV6`) on target Debian 12 / Ubuntu 22.04 / 24.04 kernels in both `CAP_NET_RAW` mode and unprivileged `net.ipv4.ping_group_range` mode (`nextdude-server check-config`).
-3. **Windows Crate Feature Flags (`windows` 0.58 & `windows-sys` 0.59)**:
-   - Confirm all feature names in `crates/client/Cargo.toml` and `WinRT` `ToastNotificationManager` / `XmlDocument` bindings in `crates/client/src/platform.rs` compile cleanly against `x86_64-pc-windows-msvc`.
+3. **Windows Build (`eframe` / `egui_plot` 0.30.0 & `windows` 0.58 / `windows-sys` 0.59)**:
+   - Confirm `ui_kit.rs`, `map_canvas.rs`, `panels/observability.rs`, all `windows` feature flags in `crates/client/Cargo.toml`, and WinRT `ToastNotificationManager` / `XmlDocument` bindings in `crates/client/src/platform.rs` compile cleanly against `x86_64-pc-windows-msvc`.
 4. **SNMPv3 RFC 3414 Interoperability on Real Hardware**:
    - Unit tests cover BER roundtrips, USM key localization, HMAC authentication, and AES/DES cipher symmetry. Wire interoperability (particularly authoritative engine boots/time discovery, privacy salt ordering, and CFB behavior) should be verified against `net-snmp` (`snmpd`) or MikroTik RouterOS / Cisco IOS hardware.
 5. **Vendor Profile OID Coverage (`profiles/*.toml`)**:
