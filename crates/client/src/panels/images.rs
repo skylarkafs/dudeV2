@@ -202,7 +202,7 @@ pub fn render_images_panel(
     let url_enabled = state
         .server_settings
         .as_ref()
-        .map_or(false, |s| s.allow_image_url_import);
+        .is_some_and(|s| s.allow_image_url_import);
     if url_enabled {
         ui.add_space(6.0);
         card_frame(theme).show(ui, |ui| {

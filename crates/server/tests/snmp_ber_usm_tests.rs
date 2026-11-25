@@ -82,7 +82,8 @@ fn snmp_v2c_and_v3_usm_auth_priv_roundtrip() {
             engine_time: 12345,
             salt_counter: 99,
         };
-        let wire_v3 = encode_v3_message(77, true, &creds, &mut sec, &sec.engine_id.clone(), b"", &pdu).unwrap();
+        let eid = sec.engine_id.clone();
+        let wire_v3 = encode_v3_message(77, true, &creds, &mut sec, &eid, b"", &pdu).unwrap();
         let parsed = decode_message(&wire_v3).unwrap();
         let (_, dec_pdu) = decode_and_verify_v3(&wire_v3, parsed, Some(&creds)).unwrap();
         assert_eq!(dec_pdu, pdu);

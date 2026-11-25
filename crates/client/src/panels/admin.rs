@@ -258,7 +258,8 @@ pub fn render_admins_groups_panel(
         ui.strong("Admin Groups & Permissions");
         ui.add_space(4.0);
         for g in &mut admin_st.groups {
-            ui.collapsing(&g.name, |ui| {
+            let group_name = g.name.clone();
+            ui.collapsing(&group_name, |ui| {
                 for perm in Permission::ALL {
                     let key = perm.as_str();
                     let mut has = g.permissions.iter().any(|p| p == key);

@@ -382,7 +382,7 @@ fn build_alarm_wav_bytes() -> Vec<u8> {
 
     for i in 0..total_samples {
         let t = (i as f32) / (sample_rate as f32);
-        let amp = if t < 0.35 || (t >= 0.5 && t < 0.85) {
+        let amp = if t < 0.35 || (0.5..0.85).contains(&t) {
             let freq = if t < 0.35 { 880.0 } else { 660.0 };
             ((2.0 * std::f32::consts::PI * freq * t).sin() * 9000.0) as i16
         } else {

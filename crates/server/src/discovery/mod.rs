@@ -168,7 +168,7 @@ impl DiscoveryManager {
         let _discovery_guard = ctx.tracker.acquire_discovery_guard();
         let existing_devices = ctx
             .storage
-            .read(|c| entities::load_devices(c))
+            .read(entities::load_devices)
             .await
             .unwrap_or_default();
 
@@ -295,7 +295,7 @@ impl DiscoveryManager {
         let mut candidate_links: Vec<v1::DiscoveryCandidateLink> = Vec::new();
         if req.include_mndp {
             let mndp = self.mndp_cache.read().await;
-            for (_, n) in mndp.iter() {
+            for n in mndp.values() {
                 let ip_s = n
                     .ipv4
                     .map(|v| v.to_string())
@@ -657,9 +657,7 @@ pub async fn auto_layout_map(
     let iters = iterations.clamp(10, 200);
 
     for step in 0..iters {
-        for d in &mut disp {
-            *d = (0.0, 0.0);
-        }
+        disp.fill((0.0, 0.0));
         // Repulsive forces between all device pairs
         for i in 0..n {
             for j in (i + 1)..n {
@@ -719,7 +717,7 @@ pub async fn auto_layout_map(
         })
         .await?;
 
-    let refreshed = ctx.storage.read(|c| entities::load_devices(c)).await?;
+    let refreshed = ctx.storage.read(entities::load_devices).await?;
     for d in refreshed.into_iter().filter(|d| d.map_id == map_id) {
         ctx.broadcast(ServerBroadcastEvent::EntityDelta(v1::EntityDelta {
             entity_type: "device".to_string(),

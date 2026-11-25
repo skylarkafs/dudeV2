@@ -28,6 +28,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, RwLock, Semaphore};
 use tracing::{error, info, warn};
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum ServerBroadcastEvent {
     LiveMetrics(v1::LiveMetricsBatch),
@@ -64,7 +65,7 @@ impl EngineContext {
     }
 
     pub async fn refresh_device_ip_index(&self) {
-        if let Ok(devs) = self.storage.read(|c| entities::load_devices(c)).await {
+        if let Ok(devs) = self.storage.read(entities::load_devices).await {
             let mut map = HashMap::with_capacity(devs.len() * 2);
             for d in devs {
                 if let Ok(ip) = d.address.parse::<IpAddr>() {
@@ -282,7 +283,7 @@ pub async fn polling_loop(ctx: EngineContext) {
             if now_mono < *due {
                 continue;
             }
-            let jitter_extra = ((svc.id.unsigned_abs() * 131) % 750) as u64;
+            let jitter_extra = (svc.id.unsigned_abs() * 131) % 750;
             *due = now_mono + Duration::from_secs(u64::from(effective_sec)) + Duration::from_millis(jitter_extra);
 
             let host_sem = Arc::clone(
@@ -440,7 +441,7 @@ pub async fn polling_loop(ctx: EngineContext) {
 
         // Recompute aggregate device states (including dependency suppression)
         if !changed_devices.is_empty() || !suppression.suppressed_children.is_empty() {
-            if let Ok(fresh_services) = ctx.storage.read(|c| entities::load_services(c)).await {
+            if let Ok(fresh_services) = ctx.storage.read(entities::load_services).await {
                 let mut by_dev: HashMap<i64, Vec<v1::ProbeState>> = HashMap::new();
                 let mut rtt_by_dev: HashMap<i64, f64> = HashMap::new();
                 for s in fresh_services {
@@ -565,7 +566,7 @@ async fn poll_links_and_interfaces(
             continue;
         };
         let last = last_if_poll.get(&dev_id).copied();
-        if last.map_or(false, |t| now_mono.saturating_duration_since(t) < Duration::from_secs(15)) {
+        if last.is_some_and(|t| now_mono.saturating_duration_since(t) < Duration::from_secs(15)) {
             continue;
         }
         last_if_poll.insert(dev_id, now_mono);
@@ -730,7 +731,7 @@ async fn poll_links_and_interfaces(
                 .map_or(1_000_000_000, |lt| lt.max_speed_bps);
             let max_speed = link
                 .max_speed_bps_override
-                .unwrap_or_else(|| if if_speed > 0 { if_speed } else { type_speed });
+                .unwrap_or(if if_speed > 0 { if_speed } else { type_speed });
 
             let remote_id = if link.src_device_id == dev_id {
                 link.dst_device_id
@@ -1065,14 +1066,14 @@ async fn evaluate_alert_rules(
         if !rule.enabled {
             continue;
         }
-        if rule.device_id.map_or(false, |id| id != dev.id) {
+        if rule.device_id.is_some_and(|id| id != dev.id) {
             continue;
         }
-        if rule.probe_id.map_or(false, |id| id != probe.id) {
+        if rule.probe_id.is_some_and(|id| id != probe.id) {
             continue;
         }
         let state_hit = rule.trigger_on_state_change && transitioned;
-        let threshold_hit = rule.value_threshold.map_or(false, |thr| {
+        let threshold_hit = rule.value_threshold.is_some_and(|thr| {
             if rule.threshold_greater_than {
                 value >= thr
             } else {

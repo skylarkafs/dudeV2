@@ -242,6 +242,7 @@ pub fn render_device_editor_modal(
         return;
     };
     let mut keep_open = true;
+    let mut cancel_clicked = false;
     let mut do_save = false;
 
     egui::Window::new(if dev.id == 0 {
@@ -548,7 +549,7 @@ pub fn render_device_editor_modal(
                     do_save = true;
                 }
                 if ui.button(tr(lang, TextKey::Cancel)).clicked() {
-                    keep_open = false;
+                    cancel_clicked = true;
                 }
             });
         });
@@ -557,7 +558,7 @@ pub fn render_device_editor_modal(
     if do_save {
         let _ = cmd_tx.try_send(ClientCommand::SaveDevice(dev));
         inv.edit_device = None;
-    } else if !keep_open {
+    } else if !keep_open || cancel_clicked {
         inv.edit_device = None;
     } else {
         inv.edit_device = Some(dev);

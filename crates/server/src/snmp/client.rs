@@ -210,12 +210,13 @@ impl SnmpClient {
                 ResolvedCredential::V3(creds) => {
                     let mut engine = self.get_or_discover_engine(&socket, target, creds).await?;
                     let msg_id = self.alloc_id();
+                    let engine_id = engine.engine_id.clone();
                     let bytes = encode_v3_message(
                         msg_id,
                         true,
                         creds,
                         &mut engine,
-                        &engine.engine_id.clone(),
+                        &engine_id,
                         b"",
                         &pdu,
                     )?;

@@ -71,7 +71,7 @@ pub fn compute_dependency_suppression(
     for &dev_id in down_devices {
         let has_down_parent = parents_by_child
             .get(&dev_id)
-            .map_or(false, |ps| ps.iter().any(|p| down_devices.contains(p)));
+            .is_some_and(|ps| ps.iter().any(|p| down_devices.contains(p)));
         if !has_down_parent {
             root_causes.push(dev_id);
         }

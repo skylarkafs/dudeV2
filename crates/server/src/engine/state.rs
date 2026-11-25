@@ -91,21 +91,11 @@ pub fn aggregate_device_state(
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FlappingTracker {
     changes: VecDeque<Instant>,
     pub is_flapping: bool,
     pub notified_current_flap: bool,
-}
-
-impl Default for FlappingTracker {
-    fn default() -> Self {
-        Self {
-            changes: VecDeque::new(),
-            is_flapping: false,
-            notified_current_flap: false,
-        }
-    }
 }
 
 impl FlappingTracker {

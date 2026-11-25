@@ -29,10 +29,9 @@ static SEQ: AtomicU64 = AtomicU64::new(1);
 
 fn authed<T>(msg: T, token: &str) -> Request<T> {
     let mut r = Request::new(msg);
-    r.metadata_mut().insert(
-        "authorization",
-        MetadataValue::try_from(format!("Bearer {token}")).unwrap(),
-    );
+    if let Ok(val) = MetadataValue::try_from(format!("Bearer {token}")) {
+        r.metadata_mut().insert("authorization", val);
+    }
     r
 }
 
@@ -43,9 +42,11 @@ async fn in_process_grpc_tls_auth_rbac_stream_version_and_reconnect() {
     let base_dir = std::env::temp_dir().join(format!("nextdude_grpc_it_{}_{n}", std::process::id()));
     std::fs::create_dir_all(&base_dir).unwrap();
 
-    let mut cfg = ServerConfig::default();
-    cfg.data_dir = base_dir.clone();
-    cfg.log_dir = base_dir.join("logs");
+    let cfg = ServerConfig {
+        data_dir: base_dir.clone(),
+        log_dir: base_dir.join("logs"),
+        ..Default::default()
+    };
 
     let secrets = SecretBox::load_or_create(&cfg.master_key_path()).unwrap();
     let storage = StorageHandle::open(&cfg.db_path(), secrets).unwrap();

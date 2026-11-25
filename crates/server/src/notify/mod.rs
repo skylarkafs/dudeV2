@@ -78,7 +78,7 @@ impl NotificationManager {
 
         let channels = self
             .storage
-            .read(|c| load_notification_channels(c))
+            .read(load_notification_channels)
             .await
             .unwrap_or_default();
 
@@ -136,7 +136,7 @@ impl NotificationManager {
     }
 
     pub async fn test_channel(&self, channel_id: i64) -> Result<(), ServerError> {
-        let channels = self.storage.read(|c| load_notification_channels(c)).await?;
+        let channels = self.storage.read(load_notification_channels).await?;
         let ch = channels
             .into_iter()
             .find(|c| c.id == channel_id)

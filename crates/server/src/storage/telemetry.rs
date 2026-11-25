@@ -106,6 +106,7 @@ pub fn run_rollups(conn: &mut Connection, now_utc: i64) -> Result<(), ServerErro
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn enforce_retention_and_vacuum(
     conn: &mut Connection,
     now_utc: i64,
@@ -277,7 +278,7 @@ pub fn downsample_min_avg_max(samples: &[v1::ChartSample], max_points: usize) ->
     if samples.len() <= max_points || max_points == 0 {
         return samples.to_vec();
     }
-    let chunk_size = (samples.len() + max_points - 1) / max_points;
+    let chunk_size = samples.len().div_ceil(max_points);
     samples
         .chunks(chunk_size)
         .map(|chunk| {

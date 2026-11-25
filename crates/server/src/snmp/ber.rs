@@ -301,7 +301,8 @@ fn encode_vlq(mut val: u64, out: &mut Vec<u8>) {
             break;
         }
     }
-    for byte in &mut buf[idx..buf.len() - 1] {
+    let end = buf.len() - 1;
+    for byte in &mut buf[idx..end] {
         *byte |= 0x80;
     }
     out.extend_from_slice(&buf[idx..]);

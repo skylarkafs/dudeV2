@@ -69,7 +69,7 @@ impl Default for MapCanvasState {
             pan: Vec2::new(60.0, 60.0),
             zoom: 1.0,
             active_tool: MapTool::Select,
-            layer_mode: v1::MapLayerMode::Both,
+            layer_mode: v1::MapLayerMode::MapLayerBoth,
             snap_to_grid: true,
             selected_devices: HashSet::new(),
             selected_links: HashSet::new(),
@@ -313,7 +313,7 @@ pub fn render_map_workspace(
                             background_scale: 1.0,
                             background_tile: false,
                             locked: false,
-                            default_layer: v1::MapLayerMode::Both as i32,
+                            default_layer: v1::MapLayerMode::MapLayerBoth as i32,
                         };
                         let _ = cmd_tx.try_send(ClientCommand::SaveMap(new_map));
                         canvas.show_new_map_dialog = false;
@@ -376,17 +376,17 @@ pub fn render_map_workspace(
 
             ui.selectable_value(
                 &mut canvas.layer_mode,
-                v1::MapLayerMode::Links,
+                v1::MapLayerMode::MapLayerLinks,
                 tr(lang, TextKey::MapLayerLinks),
             );
             ui.selectable_value(
                 &mut canvas.layer_mode,
-                v1::MapLayerMode::Dependencies,
+                v1::MapLayerMode::MapLayerDependencies,
                 tr(lang, TextKey::MapLayerDependencies),
             );
             ui.selectable_value(
                 &mut canvas.layer_mode,
-                v1::MapLayerMode::Both,
+                v1::MapLayerMode::MapLayerBoth,
                 tr(lang, TextKey::MapLayerBoth),
             );
             ui.separator();
@@ -503,6 +503,8 @@ pub fn render_map_workspace(
         .values()
         .filter(|l| l.map_id == map_id)
         .collect();
+    let map_device_count = map_devices.len();
+    let map_link_count = map_links.len();
 
     // Find bar + Zoom controls strip
     ui.horizontal(|ui| {
@@ -664,7 +666,7 @@ pub fn render_map_workspace(
         while gx < canvas_rect.max.x {
             painter.line_segment(
                 [Pos2::new(gx, canvas_rect.min.y), Pos2::new(gx, canvas_rect.max.y)],
-                Stroke::new(1.0, grid_col),
+                Stroke::new(1.0_f32, grid_col),
             );
             gx += step;
         }
@@ -672,7 +674,7 @@ pub fn render_map_workspace(
         while gy < canvas_rect.max.y {
             painter.line_segment(
                 [Pos2::new(canvas_rect.min.x, gy), Pos2::new(canvas_rect.max.x, gy)],
-                Stroke::new(1.0, grid_col),
+                Stroke::new(1.0_f32, grid_col),
             );
             gy += step;
         }
@@ -756,7 +758,7 @@ pub fn render_map_workspace(
         painter.rect_stroke(
             rect,
             Rounding::same(6.0),
-            Stroke::new(if is_sel { 2.2 } else { 1.2 }, border_col),
+            Stroke::new(if is_sel { 2.2_f32 } else { 1.2_f32 }, border_col),
         );
         if canvas.zoom >= 0.35 {
             painter.text(
@@ -789,7 +791,7 @@ pub fn render_map_workspace(
         painter.rect_stroke(
             rect,
             Rounding::same(8.0),
-            Stroke::new(if is_sel { 2.6 } else { 1.8 }, border),
+            Stroke::new(if is_sel { 2.6_f32 } else { 1.8_f32 }, border),
         );
         if canvas.zoom >= 0.35 {
             painter.text(
@@ -805,7 +807,7 @@ pub fn render_map_workspace(
     // Draw Dependency Layer
     if matches!(
         canvas.layer_mode,
-        v1::MapLayerMode::Dependencies | v1::MapLayerMode::Both
+        v1::MapLayerMode::MapLayerDependencies | v1::MapLayerMode::MapLayerBoth
     ) {
         for dep in state.dependencies.values().filter(|d| d.map_id == map_id) {
             if let (Some(parent), Some(child)) = (
@@ -820,7 +822,7 @@ pub fn render_map_workspace(
                 let p1 = canvas.world_to_screen(origin, parent.pos_x, parent.pos_y);
                 let p2 = canvas.world_to_screen(origin, child.pos_x, child.pos_y);
                 let dep_col = Color32::from_rgba_unmultiplied(249, 115, 22, 185);
-                draw_dashed_segment(&painter, p1, p2, 6.0, 4.0, Stroke::new(1.6, dep_col));
+                draw_dashed_segment(&painter, p1, p2, 6.0, 4.0, Stroke::new(1.6_f32, dep_col));
                 draw_arrowhead(&painter, p1, p2, 8.0, dep_col);
             }
         }
@@ -849,7 +851,7 @@ pub fn render_map_workspace(
 
     if matches!(
         canvas.layer_mode,
-        v1::MapLayerMode::Links | v1::MapLayerMode::Both
+        v1::MapLayerMode::MapLayerLinks | v1::MapLayerMode::MapLayerBoth
     ) {
         for link in &map_links {
             let (Some(src), Some(dst)) = (
@@ -970,7 +972,7 @@ pub fn render_map_workspace(
                     painter.circle_stroke(
                         h_pos,
                         5.5,
-                        Stroke::new(1.5, Color32::from_rgb(14, 165, 233)),
+                        Stroke::new(1.5_f32, Color32::from_rgb(14, 165, 233)),
                     );
                 }
                 if lstatus == v1::LinkStatus::NoReply {
@@ -1013,7 +1015,7 @@ pub fn render_map_workspace(
             110.0 / f64::from(canvas.zoom),
             18.0 / f64::from(canvas.zoom),
         );
-        for ((_, _, lbl), pos) in label_anchors.into_iter().zip(anchor_pts.into_iter()) {
+        for ((_, _, lbl), pos) in label_anchors.into_iter().zip(anchor_pts) {
             let sp = canvas.world_to_screen(origin, pos.x, pos.y);
             let bg = match theme {
                 ThemeMode::Dark => Color32::from_rgba_unmultiplied(15, 23, 42, 220),
@@ -1044,7 +1046,7 @@ pub fn render_map_workspace(
             } else {
                 Color32::from_rgb(249, 115, 22)
             };
-            draw_dashed_segment(&painter, sp, pointer_screen, 8.0, 5.0, Stroke::new(2.0, col));
+            draw_dashed_segment(&painter, sp, pointer_screen, 8.0, 5.0, Stroke::new(2.0_f32, col));
             ctx.request_repaint();
         }
     }
@@ -1064,7 +1066,7 @@ pub fn render_map_workspace(
         painter.rect_stroke(
             rect,
             Rounding::same(6.0),
-            Stroke::new(if is_sel { 3.2 } else { 2.2 }, col),
+            Stroke::new(if is_sel { 3.2_f32 } else { 2.2_f32 }, col),
         );
         if canvas.zoom >= 0.35 {
             painter.text(
@@ -1110,7 +1112,7 @@ pub fn render_map_workspace(
                 painter.circle_stroke(
                     sp,
                     rad + 2.5,
-                    Stroke::new(1.8, to_color32(accent_rgb(theme), 255)),
+                    Stroke::new(1.8_f32, to_color32(accent_rgb(theme), 255)),
                 );
             }
             continue;
@@ -1118,7 +1120,7 @@ pub fn render_map_workspace(
 
         let node_rect = Rect::from_center_size(sp, Vec2::new(rw * 2.0, rh * 2.0));
         let shape = v1::NodeShape::try_from(dev.shape).unwrap_or(v1::NodeShape::RoundedRect);
-        let border_stroke = Stroke::new(if selected { 3.2 } else { 2.0 }, st_col);
+        let border_stroke = Stroke::new(if selected { 3.2_f32 } else { 2.0_f32 }, st_col);
 
         // Selection or hover halo
         if selected || is_hovered || is_find_match {
@@ -1130,12 +1132,12 @@ pub fn render_map_workspace(
                 to_color32(accent_rgb(theme), 40)
             };
             if shape == v1::NodeShape::Circle {
-                painter.circle_stroke(sp, rw + 4.5, Stroke::new(3.0, halo_col));
+                painter.circle_stroke(sp, rw + 4.5, Stroke::new(3.0_f32, halo_col));
             } else {
                 painter.rect_stroke(
                     node_rect.expand(4.0),
                     Rounding::same(10.0),
-                    Stroke::new(3.0, halo_col),
+                    Stroke::new(3.0_f32, halo_col),
                 );
             }
         }
@@ -1498,7 +1500,7 @@ pub fn render_map_workspace(
                 painter.rect_stroke(
                     m_rect,
                     Rounding::ZERO,
-                    Stroke::new(1.2, to_color32(accent_rgb(theme), 230)),
+                    Stroke::new(1.2_f32, to_color32(accent_rgb(theme), 230)),
                 );
             }
         }
@@ -1529,7 +1531,7 @@ pub fn render_map_workspace(
                 let min_y = w1.y.min(w2.y);
                 let max_y = w1.y.max(w2.y);
                 canvas.clear_selection();
-                for d in &map_devices {
+                for d in state.devices.values().filter(|d| d.map_id == map_id) {
                     if d.pos_x >= min_x
                         && d.pos_x <= max_x
                         && d.pos_y >= min_y
@@ -1618,7 +1620,7 @@ pub fn render_map_workspace(
             egui::Frame::default()
                 .fill(hud_bg)
                 .stroke(Stroke::new(
-                    1.0,
+                    1.0_f32,
                     to_color32(accent_rgb(theme), 90),
                 ))
                 .rounding(Rounding::same(6.0))
@@ -1627,8 +1629,8 @@ pub fn render_map_workspace(
                     ui.horizontal(|ui| {
                         ui.small(format!(
                             "Devices: {} | Links: {} | {:.0}%",
-                            map_devices.len(),
-                            map_links.len(),
+                            map_device_count,
+                            map_link_count,
                             canvas.zoom * 100.0
                         ));
                     });

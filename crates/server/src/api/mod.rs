@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 use crate::crypto::generate_session_token;
 use crate::discovery::{auto_layout_map, DiscoveryManager};
 use crate::engine::{EngineContext, ServerBroadcastEvent};
@@ -28,6 +30,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::Stream;
 use tonic::{Request, Response, Status};
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum UndoPayload {
     Device {
@@ -1223,7 +1226,7 @@ impl NextDudeService for NextDudeGrpcService {
             entity_type: "dependency".to_string(),
             deleted: false,
             entity_id: saved.id,
-            dependency: Some(saved.clone()),
+            dependency: Some(saved),
             ..Default::default()
         }));
         Ok(Response::new(saved))

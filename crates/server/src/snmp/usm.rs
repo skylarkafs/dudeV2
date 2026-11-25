@@ -7,7 +7,7 @@ use crate::snmp::ber::{
 use aes::Aes128;
 use cfb_mode::cipher::{AsyncStreamCipher, KeyIvInit as StreamKeyIvInit};
 use cipher::block_padding::NoPadding;
-use cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit as BlockKeyIvInit};
+use cipher::{BlockDecryptMut, BlockEncryptMut};
 use des::Des;
 use hmac::{Hmac, Mac};
 use md5::{Digest as Md5Digest, Md5};

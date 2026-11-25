@@ -55,30 +55,30 @@ pub fn apply_app_theme(ctx: &egui::Context, theme: ThemeMode) {
             v.code_bg_color = Color32::from_rgb(15, 23, 42);
             v.override_text_color = Some(Color32::from_rgb(226, 232, 240));
             v.selection.bg_fill = Color32::from_rgba_unmultiplied(14, 165, 233, 85);
-            v.selection.stroke = Stroke::new(1.0, Color32::from_rgb(56, 189, 248));
+            v.selection.stroke = Stroke::new(1.0_f32, Color32::from_rgb(56, 189, 248));
             v.hyperlink_color = Color32::from_rgb(56, 189, 248);
 
             v.widgets.noninteractive.bg_fill = Color32::from_rgb(19, 28, 46);
-            v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(41, 53, 72));
-            v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, Color32::from_rgb(203, 213, 225));
+            v.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(41, 53, 72));
+            v.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(203, 213, 225));
 
             v.widgets.inactive.bg_fill = Color32::from_rgb(30, 41, 59);
             v.widgets.inactive.weak_bg_fill = Color32::from_rgb(30, 41, 59);
-            v.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(51, 65, 85));
-            v.widgets.inactive.fg_stroke = Stroke::new(1.0, Color32::from_rgb(226, 232, 240));
+            v.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(51, 65, 85));
+            v.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(226, 232, 240));
 
             v.widgets.hovered.bg_fill = Color32::from_rgb(39, 53, 73);
             v.widgets.hovered.weak_bg_fill = Color32::from_rgb(39, 53, 73);
-            v.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgb(56, 189, 248));
-            v.widgets.hovered.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+            v.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(56, 189, 248));
+            v.widgets.hovered.fg_stroke = Stroke::new(1.0_f32, Color32::WHITE);
 
             v.widgets.active.bg_fill = Color32::from_rgb(12, 74, 110);
             v.widgets.active.weak_bg_fill = Color32::from_rgb(12, 74, 110);
-            v.widgets.active.bg_stroke = Stroke::new(1.5, Color32::from_rgb(56, 189, 248));
-            v.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+            v.widgets.active.bg_stroke = Stroke::new(1.5_f32, Color32::from_rgb(56, 189, 248));
+            v.widgets.active.fg_stroke = Stroke::new(1.0_f32, Color32::WHITE);
 
             v.widgets.open.bg_fill = Color32::from_rgb(30, 41, 59);
-            v.widgets.open.bg_stroke = Stroke::new(1.0, Color32::from_rgb(56, 189, 248));
+            v.widgets.open.bg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(56, 189, 248));
             v
         }
         ThemeMode::Light => {
@@ -89,24 +89,24 @@ pub fn apply_app_theme(ctx: &egui::Context, theme: ThemeMode) {
             v.extreme_bg_color = Color32::from_rgb(255, 255, 255);
             v.override_text_color = Some(Color32::from_rgb(15, 23, 42));
             v.selection.bg_fill = Color32::from_rgba_unmultiplied(2, 132, 199, 50);
-            v.selection.stroke = Stroke::new(1.0, Color32::from_rgb(2, 132, 199));
+            v.selection.stroke = Stroke::new(1.0_f32, Color32::from_rgb(2, 132, 199));
             v.hyperlink_color = Color32::from_rgb(2, 132, 199);
 
             v.widgets.noninteractive.bg_fill = Color32::from_rgb(255, 255, 255);
-            v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(226, 232, 240));
-            v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, Color32::from_rgb(51, 65, 85));
+            v.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(226, 232, 240));
+            v.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(51, 65, 85));
 
             v.widgets.inactive.bg_fill = Color32::from_rgb(232, 238, 246);
             v.widgets.inactive.weak_bg_fill = Color32::from_rgb(232, 238, 246);
-            v.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(203, 213, 225));
-            v.widgets.inactive.fg_stroke = Stroke::new(1.0, Color32::from_rgb(15, 23, 42));
+            v.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(203, 213, 225));
+            v.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(15, 23, 42));
 
             v.widgets.hovered.bg_fill = Color32::from_rgb(219, 234, 254);
             v.widgets.hovered.weak_bg_fill = Color32::from_rgb(219, 234, 254);
-            v.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgb(2, 132, 199));
+            v.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(2, 132, 199));
 
             v.widgets.active.bg_fill = Color32::from_rgb(186, 230, 253);
-            v.widgets.active.bg_stroke = Stroke::new(1.5, Color32::from_rgb(2, 132, 199));
+            v.widgets.active.bg_stroke = Stroke::new(1.5_f32, Color32::from_rgb(2, 132, 199));
             v
         }
     };
@@ -114,7 +114,7 @@ pub fn apply_app_theme(ctx: &egui::Context, theme: ThemeMode) {
     let r_widget = Rounding::same(5.0);
     visuals.window_rounding = Rounding::same(8.0);
     visuals.menu_rounding = Rounding::same(6.0);
-    visuals.window_stroke = Stroke::new(1.0, border_color(theme));
+    visuals.window_stroke = Stroke::new(1.0_f32, border_color(theme));
     visuals.widgets.noninteractive.rounding = r_widget;
     visuals.widgets.inactive.rounding = r_widget;
     visuals.widgets.hovered.rounding = r_widget;
@@ -134,7 +134,7 @@ pub fn apply_app_theme(ctx: &egui::Context, theme: ThemeMode) {
 pub fn card_frame(theme: ThemeMode) -> egui::Frame {
     egui::Frame::default()
         .fill(surface_fill(theme))
-        .stroke(Stroke::new(1.0, border_color(theme)))
+        .stroke(Stroke::new(1.0_f32, border_color(theme)))
         .rounding(Rounding::same(8.0))
         .inner_margin(Margin::same(12.0))
 }
@@ -147,7 +147,7 @@ pub fn toolbar_frame(theme: ThemeMode) -> egui::Frame {
     };
     egui::Frame::default()
         .fill(fill)
-        .stroke(Stroke::new(1.0, border_color(theme)))
+        .stroke(Stroke::new(1.0_f32, border_color(theme)))
         .rounding(Rounding::same(6.0))
         .inner_margin(Margin::symmetric(10.0, 6.0))
 }
@@ -161,7 +161,7 @@ pub fn notice_frame(theme: ThemeMode, rgb: RgbColor) -> egui::Frame {
     egui::Frame::default()
         .fill(Color32::from_rgba_unmultiplied(rgb.r, rgb.g, rgb.b, bg_alpha))
         .stroke(Stroke::new(
-            1.0,
+            1.0_f32,
             Color32::from_rgba_unmultiplied(rgb.r, rgb.g, rgb.b, 160),
         ))
         .rounding(Rounding::same(6.0))
@@ -175,7 +175,7 @@ pub fn status_pill(ui: &mut egui::Ui, label: &str, rgb: RgbColor) {
     let fg = Color32::from_rgb(rgb.r, rgb.g, rgb.b);
     egui::Frame::default()
         .fill(bg)
-        .stroke(Stroke::new(1.0, border))
+        .stroke(Stroke::new(1.0_f32, border))
         .rounding(Rounding::same(99.0))
         .inner_margin(Margin::symmetric(8.0, 2.0))
         .show(ui, |ui| {

@@ -1212,7 +1212,7 @@ pub fn save_dependency(
         params![dep.map_id, dep.parent_device_id, dep.child_device_id],
     )
     .map_err(|e| ServerError::Storage(e.to_string()))?;
-    let mut out = dep.clone();
+    let mut out = *dep;
     out.id = conn.last_insert_rowid();
     out.version = 1;
     Ok(out)

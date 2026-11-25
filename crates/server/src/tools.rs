@@ -38,7 +38,7 @@ pub async fn execute_tool_stream(
     };
 
     let target = if let Some(dev_id) = req.device_id {
-        match ctx.storage.read(move |c| entities::load_devices(c)).await {
+        match ctx.storage.read(entities::load_devices).await {
             Ok(devs) => match devs.into_iter().find(|d| d.id == dev_id) {
                 Some(d) => build_probe_target(&ctx.storage, &d).await,
                 None => default_target(&req.target),
@@ -293,7 +293,7 @@ async fn run_traceroute(dest: IpAddr, tx: &mpsc::Sender<Result<v1::ToolOutputChu
 
     for ttl in 1u32..=30 {
         let sock_ref = socket2::SockRef::from(&async_sock);
-        let _ = sock_ref.set_ttl_v4(ttl);
+        let _ = sock_ref.set_ttl(ttl);
 
         let seq = ttl as u16;
         let pkt = build_icmp_v4_echo(ident, seq, b"NDTrace");

@@ -1,16 +1,25 @@
 use crate::tofu::{TofuDecision, TofuVerifier};
+use hyper_util::rt::TokioIo;
 use nextdude_common::proto::v1;
 use nextdude_common::proto::v1::next_dude_service_client::NextDudeServiceClient;
 use nextdude_common::API_VERSION;
+use rustls::pki_types::ServerName;
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, RwLock};
+use std::task::{Context, Poll};
 use std::time::Duration;
+use tokio::net::TcpStream;
 use tokio::sync::mpsc;
+use tokio_rustls::client::TlsStream;
+use tokio_rustls::TlsConnector;
 use tokio_stream::StreamExt;
 use tonic::codec::CompressionEncoding;
 use tonic::metadata::MetadataValue;
-use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
+use tonic::transport::{Channel, Endpoint, Uri};
 use tonic::Request;
+use tower_service::Service;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionPhase {
@@ -30,6 +39,7 @@ pub struct ConnectParams {
     pub password: String,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum ClientCommand {
     Connect(ConnectParams),
@@ -98,6 +108,7 @@ pub enum ClientCommand {
     ListVendorProfiles,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum ClientEvent {
     PhaseChanged(ConnectionPhase),
@@ -246,7 +257,9 @@ async fn worker_loop(
                     }
                     ClientCommand::Disconnect => {
                         if let (Some(mut c), Some(tok)) = (active_client.take(), active_token.take()) {
-                            let _ = c.logout(authed_req(v1::Empty {}, &tok)).await;
+                            if let Ok(req) = authed_req(v1::Empty {}, &tok) {
+                                let _ = c.logout(req).await;
+                            }
                         }
                         if let Some(h) = stream_task.take() {
                             h.abort();
@@ -353,12 +366,61 @@ enum ConnectError {
     Failed(String),
 }
 
+type ConnectorFuture = Pin<
+    Box<dyn Future<Output = Result<TokioIo<TlsStream<TcpStream>>, std::io::Error>> + Send>,
+>;
+
+/// Custom `tonic` connector establishing TCP + `tokio-rustls` TLS with TOFU verification.
+#[derive(Clone)]
+struct TofuTlsConnector {
+    connect_target: String,
+    server_name: ServerName<'static>,
+    tls: TlsConnector,
+}
+
+impl Service<Uri> for TofuTlsConnector {
+    type Response = TokioIo<TlsStream<TcpStream>>;
+    type Error = std::io::Error;
+    type Future = ConnectorFuture;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, _uri: Uri) -> Self::Future {
+        let target = self.connect_target.clone();
+        let server_name = self.server_name.clone();
+        let tls = self.tls.clone();
+        Box::pin(async move {
+            let tcp = TcpStream::connect(&target).await?;
+            let _ = tcp.set_nodelay(true);
+            let tls_stream = tls.connect(server_name, tcp).await?;
+            Ok(TokioIo::new(tls_stream))
+        })
+    }
+}
+
 async fn establish_session(
     params: &ConnectParams,
     known_fps: &Arc<RwLock<HashMap<String, String>>>,
     sub: &v1::SubscribeRequest,
     stream_tx: &mpsc::Sender<Result<v1::StreamEvent, String>>,
 ) -> Result<(NextDudeServiceClient<Channel>, v1::LoginResponse, tokio::task::JoinHandle<()>), ConnectError> {
+    let raw_addr = params.address.trim();
+    let bare_host = raw_addr.trim_start_matches('[').trim_end_matches(']');
+    if bare_host.is_empty() {
+        return Err(ConnectError::Failed("server address is empty".to_string()));
+    }
+    let authority_host = if bare_host.contains(':') {
+        format!("[{bare_host}]")
+    } else {
+        bare_host.to_string()
+    };
+    let connect_target = format!("{authority_host}:{}", params.port);
+    let server_name = ServerName::try_from(bare_host.to_string())
+        .map_err(|e| ConnectError::Failed(format!("invalid TLS server name '{bare_host}': {e}")))?;
+
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let host_key = format!("{}:{}", params.address, params.port);
     let verifier = Arc::new(TofuVerifier::new(host_key, Arc::clone(known_fps)));
     let mut rustls_cfg = rustls::ClientConfig::builder()
@@ -367,17 +429,26 @@ async fn establish_session(
         .with_no_client_auth();
     rustls_cfg.alpn_protocols = vec![b"h2".to_vec()];
 
-    let tls_cfg = ClientTlsConfig::new().rustls_client_config(rustls_cfg);
-    let uri = format!("https://{}:{}", params.address, params.port);
-    let endpoint = Endpoint::from_shared(uri)
+    // Use `http://` on the Endpoint URI so Tonic's `Connector` delegates TLS to `TofuTlsConnector`,
+    // while `origin` preserves `https://` scheme + authority in outgoing HTTP/2 headers.
+    let transport_uri = format!("http://{connect_target}");
+    let origin_uri: Uri = format!("https://{connect_target}")
+        .parse()
+        .map_err(|e| ConnectError::Failed(format!("invalid origin URI: {e}")))?;
+    let endpoint = Endpoint::from_shared(transport_uri)
         .map_err(|e| ConnectError::Failed(format!("invalid endpoint URI: {e}")))?
-        .tls_config(tls_cfg)
-        .map_err(|e| ConnectError::Failed(format!("TLS config failed: {e}")))?
+        .origin(origin_uri)
         .connect_timeout(Duration::from_secs(8))
         .http2_keep_alive_interval(Duration::from_secs(20))
         .keep_alive_timeout(Duration::from_secs(10));
 
-    let channel = match endpoint.connect().await {
+    let connector = TofuTlsConnector {
+        connect_target,
+        server_name,
+        tls: TlsConnector::from(Arc::new(rustls_cfg)),
+    };
+
+    let channel = match endpoint.connect_with_connector(connector).await {
         Ok(ch) => ch,
         Err(e) => {
             if let Some(dec) = verifier.take_last_decision() {
@@ -458,6 +529,7 @@ async fn start_subscription(
     }))
 }
 
+#[allow(clippy::result_large_err)]
 fn authed_req<T>(body: T, token: &str) -> Result<Request<T>, tonic::Status> {
     let mut req = Request::new(body);
     let val = MetadataValue::try_from(format!("Bearer {token}"))

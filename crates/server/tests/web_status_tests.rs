@@ -74,9 +74,11 @@ async fn web_status_routes_serve_html_stats_and_healthz() {
         ..Default::default()
     };
 
-    let storage = StorageHandle::open(&cfg.db_path(), SecretBox::from_raw_key([0x11; 32])).unwrap();
+    let secrets = SecretBox::from_raw_key([0x11; 32]);
+    let storage = StorageHandle::open(&cfg.db_path(), secrets.clone()).unwrap();
+    let secrets_for_dev = secrets.clone();
     storage
-        .write(|c| {
+        .write(move |c| {
             let map = entities::save_map(
                 c,
                 &v1::NetworkMap {
@@ -96,12 +98,12 @@ async fn web_status_routes_serve_html_stats_and_healthz() {
                 aggregate_state: v1::ProbeState::Up as i32,
                 ..Default::default()
             };
-            dev = entities::save_device(c, &dev)?;
+            dev = entities::save_device(c, &secrets_for_dev, &dev)?;
             c.execute(
                 "UPDATE devices SET aggregate_state=?1 WHERE id=?2",
                 rusqlite::params![v1::ProbeState::Up as i32, dev.id],
             )
-            .unwrap();
+            .map_err(|e| nextdude_server::error::ServerError::Storage(e.to_string()))?;
             Ok(())
         })
         .await

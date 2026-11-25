@@ -15,6 +15,9 @@ tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tonic = { workspace = true }
 rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+hyper-util = { workspace = true }
+tower-service = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -22,4 +25,3 @@ tracing = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 base64 = { workspace = true }
-chrono = { workspace = true }

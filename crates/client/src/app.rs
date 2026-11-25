@@ -644,7 +644,8 @@ impl eframe::App for NextDudeApp {
             .min_width(180.0)
             .show(ctx, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    let sections: &[(&str, &str, &[(ActiveWorkspaceTab, TextKey)])] = &[
+                    type NavSection<'a> = (&'a str, &'a str, &'a [(ActiveWorkspaceTab, TextKey)]);
+                    let sections: &[NavSection<'_>] = &[
                         (
                             "RUANG KERJA",
                             "WORKSPACE",
@@ -779,7 +780,8 @@ impl eframe::App for NextDudeApp {
                 ui.add_space(8.0);
             }
 
-            let cmd_tx = &self.worker.cmd_tx;
+            let cmd_tx_owned = self.worker.cmd_tx.clone();
+            let cmd_tx = &cmd_tx_owned;
             let requested = &mut self.requested_images;
             let mut request_img = |img_id: i64, variant: &str| {
                 let k = format!("img:{img_id}:{variant}");

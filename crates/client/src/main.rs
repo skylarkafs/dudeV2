@@ -9,7 +9,7 @@ mod platform;
 mod ui_kit;
 
 use eframe::egui;
-use eframe::egui_wgpu::{WgpuConfiguration, WgpuSetup, WgpuSetupCreateNew};
+use eframe::egui_wgpu::{WgpuConfiguration, WgpuSetup};
 use eframe::wgpu;
 use nextdude_client_core::config::ClientLocalConfig;
 use nextdude_common::APP_NAME;
@@ -86,41 +86,27 @@ fn build_native_options(
     icon: Arc<egui::IconData>,
     force_software_fallback: bool,
 ) -> eframe::NativeOptions {
-    let wgpu_setup = WgpuSetup::CreateNew(WgpuSetupCreateNew {
-        instance_descriptor: wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::DX12 | wgpu::Backends::GL,
-            ..Default::default()
-        },
+    let wgpu_setup = WgpuSetup::CreateNew {
+        supported_backends: wgpu::Backends::DX12 | wgpu::Backends::GL,
         power_preference: if force_software_fallback {
             wgpu::PowerPreference::LowPower
         } else {
             wgpu::PowerPreference::HighPerformance
         },
-        force_fallback_adapter: force_software_fallback,
-        native_adapter_selector: if force_software_fallback {
-            None
-        } else {
-            Some(Arc::new(|adapters, surface| {
-                let compatible = |a: &wgpu::Adapter| {
-                    surface.map_or(true, |s| a.is_surface_supported(s))
-                };
-                adapters
-                    .iter()
-                    .find(|a| {
-                        compatible(a) && a.get_info().device_type != wgpu::DeviceType::Cpu
-                    })
-                    .or_else(|| adapters.iter().find(|a| compatible(a)))
-                    .cloned()
-            }))
-        },
-        device_descriptor: Arc::new(|_adapter| wgpu::DeviceDescriptor {
-            label: Some("nextdude-wgpu-device"),
-            required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::downlevel_defaults(),
-            memory_hints: wgpu::MemoryHints::default(),
+        device_descriptor: Arc::new(|adapter| {
+            let base_limits = if adapter.get_info().backend == wgpu::Backend::Gl {
+                wgpu::Limits::downlevel_webgl2_defaults()
+            } else {
+                wgpu::Limits::downlevel_defaults()
+            };
+            wgpu::DeviceDescriptor {
+                label: Some("nextdude-wgpu-device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: base_limits,
+                memory_hints: wgpu::MemoryHints::default(),
+            }
         }),
-        ..Default::default()
-    });
+    };
 
     eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,

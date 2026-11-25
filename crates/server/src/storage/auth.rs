@@ -65,6 +65,8 @@ pub fn reset_admin_password(
     Ok(())
 }
 
+type AdminAuthRow = (i64, String, String, String, String, bool, i64, i64);
+
 pub fn authenticate_admin(
     conn: &mut Connection,
     username: &str,
@@ -73,7 +75,7 @@ pub fn authenticate_admin(
     lockout_sec: i64,
     now_utc: i64,
 ) -> Result<AuthenticatedAdmin, ServerError> {
-    let row: Option<(i64, String, String, String, String, bool, i64, i64)> = conn
+    let row: Option<AdminAuthRow> = conn
         .query_row(
             "SELECT a.id, a.username, a.password_hash, g.name, g.permissions_json, a.enabled, a.failed_attempts, a.locked_until_utc
              FROM admins a JOIN admin_groups g ON a.group_id = g.id

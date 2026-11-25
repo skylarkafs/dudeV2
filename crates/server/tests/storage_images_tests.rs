@@ -21,7 +21,9 @@ fn temp_db_path(name: &str) -> std::path::PathBuf {
 async fn sqlite_migrations_rollups_and_retention() {
     let db = temp_db_path("rollup");
     let storage = StorageHandle::open(&db, SecretBox::from_raw_key([0x42; 32])).unwrap();
-    let now = chrono::Utc::now().timestamp();
+    // Pin `now` to second 45 of the current minute so `now - 30` and `now - 10`
+    // always land in the same 1-minute rollup bucket.
+    let now = (chrono::Utc::now().timestamp() / 60) * 60 + 45;
 
     storage
         .write(move |c| {
