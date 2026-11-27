@@ -287,11 +287,19 @@ impl ClientStateCache {
     }
 
     /// Resolves device image in exact priority order:
-    /// 1) manual device image, 2) model-mapped image, 3) vendor-detected image, 4) device-type generic icon.
+    /// 1) manual uploaded image, 2) explicit built-in SVG asset key ("svg:..."),
+    /// 3) model/vendor uploaded image, 4) TOML-resolved SVG key, 5) device-type default.
     pub fn resolve_device_image(&self, dev: &v1::Device) -> DeviceImageSource {
         if let Some(custom_id) = dev.custom_image_id {
             if self.images.contains_key(&custom_id) {
                 return DeviceImageSource::UploadedImage(custom_id);
+            }
+        }
+        if let Some(ref key) = dev.resolved_image_key {
+            if let Some(explicit_svg) = key.strip_prefix("svg:") {
+                if !explicit_svg.is_empty() {
+                    return DeviceImageSource::BuiltinIconKey(explicit_svg.to_string());
+                }
             }
         }
         if let Some(resolved_id) = dev.resolved_image_id {
@@ -315,6 +323,11 @@ impl ClientStateCache {
                     && im.vendor.to_ascii_lowercase() == vendor_l
             }) {
                 return DeviceImageSource::UploadedImage(img.id);
+            }
+        }
+        if let Some(ref key) = dev.resolved_image_key {
+            if !key.is_empty() {
+                return DeviceImageSource::BuiltinIconKey(key.clone());
             }
         }
         if let Some(dt) = self.device_types.get(&dev.device_type_id) {

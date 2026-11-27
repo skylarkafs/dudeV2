@@ -1,6 +1,7 @@
 use crate::panels::inventory::fmt_local_ts;
 use crate::ui_kit::{
-    card_frame, empty_state_card, muted_color, pick_lang, section_heading, severity_pill,
+    card_frame, centered_modal, empty_state_card, modal_footer_buttons, muted_color, pick_lang,
+    primary_button, section_heading, segmented_track, segmented_value, severity_pill, table_card,
     toolbar_frame,
 };
 use eframe::egui;
@@ -144,43 +145,40 @@ pub fn render_events_panel(
         return;
     }
 
-    card_frame(theme).show(ui, |ui| {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            egui::Grid::new("events_grid")
-                .striped(true)
-                .spacing([12.0, 7.0])
-                .num_columns(6)
-                .show(ui, |ui| {
-                    ui.strong(tr(lang, TextKey::Timestamp));
-                    ui.strong(tr(lang, TextKey::Severity));
-                    ui.strong("Device");
-                    ui.strong("Category");
-                    ui.strong(tr(lang, TextKey::Message));
-                    ui.strong(tr(lang, TextKey::Action));
-                    ui.end_row();
-                    for e in rows {
-                        let sev = v1::Severity::try_from(e.severity).unwrap_or(v1::Severity::Info);
-                        ui.monospace(fmt_local_ts(e.timestamp_utc));
-                        severity_pill(ui, lang, theme, sev);
-                        ui.strong(&e.device_name);
-                        ui.monospace(&e.category);
-                        ui.label(&e.message);
-                        if e.acknowledged {
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "Ack: {}",
-                                    e.ack_by.as_deref().unwrap_or("")
-                                ))
-                                .small()
-                                .color(muted_color(theme)),
-                            );
-                        } else if ui.button(tr(lang, TextKey::Acknowledge)).clicked() {
-                            let _ = cmd_tx.try_send(ClientCommand::AcknowledgeAlert(e.id));
-                        }
-                        ui.end_row();
+    table_card(ui, theme, "events_scroll", |ui| {
+        egui::Grid::new("events_grid")
+            .spacing([14.0, 8.0])
+            .num_columns(6)
+            .show(ui, |ui| {
+                ui.strong(tr(lang, TextKey::Timestamp));
+                ui.strong(tr(lang, TextKey::Severity));
+                ui.strong("Device");
+                ui.strong("Category");
+                ui.strong(tr(lang, TextKey::Message));
+                ui.strong(tr(lang, TextKey::Action));
+                ui.end_row();
+                for e in rows {
+                    let sev = v1::Severity::try_from(e.severity).unwrap_or(v1::Severity::Info);
+                    ui.monospace(fmt_local_ts(e.timestamp_utc));
+                    severity_pill(ui, lang, theme, sev);
+                    ui.strong(&e.device_name);
+                    ui.monospace(&e.category);
+                    ui.label(&e.message);
+                    if e.acknowledged {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "Ack: {}",
+                                e.ack_by.as_deref().unwrap_or("")
+                            ))
+                            .small()
+                            .color(muted_color(theme)),
+                        );
+                    } else if ui.button(tr(lang, TextKey::Acknowledge)).clicked() {
+                        let _ = cmd_tx.try_send(ClientCommand::AcknowledgeAlert(e.id));
                     }
-                });
-        });
+                    ui.end_row();
+                }
+            });
     });
 }
 
@@ -274,31 +272,28 @@ pub fn render_syslog_panel(
         return;
     }
 
-    card_frame(theme).show(ui, |ui| {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            egui::Grid::new("syslog_grid")
-                .striped(true)
-                .spacing([12.0, 6.0])
-                .num_columns(6)
-                .show(ui, |ui| {
-                    ui.strong(tr(lang, TextKey::Timestamp));
-                    ui.strong("Source IP");
-                    ui.strong("Device");
-                    ui.strong("Fac/Sev");
-                    ui.strong("App/Tag");
-                    ui.strong(tr(lang, TextKey::Message));
+    table_card(ui, theme, "syslog_scroll", |ui| {
+        egui::Grid::new("syslog_grid")
+            .spacing([14.0, 8.0])
+            .num_columns(6)
+            .show(ui, |ui| {
+                ui.strong(tr(lang, TextKey::Timestamp));
+                ui.strong("Source IP");
+                ui.strong("Device");
+                ui.strong("Fac/Sev");
+                ui.strong("App/Tag");
+                ui.strong(tr(lang, TextKey::Message));
+                ui.end_row();
+                for s in rows {
+                    ui.monospace(fmt_local_ts(s.timestamp_utc));
+                    ui.monospace(&s.source_ip);
+                    ui.strong(&s.device_name);
+                    ui.monospace(format!("{}/{}", s.facility, s.severity));
+                    ui.monospace(&s.app_name);
+                    ui.label(&s.message);
                     ui.end_row();
-                    for s in rows {
-                        ui.monospace(fmt_local_ts(s.timestamp_utc));
-                        ui.monospace(&s.source_ip);
-                        ui.strong(&s.device_name);
-                        ui.monospace(format!("{}/{}", s.facility, s.severity));
-                        ui.monospace(&s.app_name);
-                        ui.label(&s.message);
-                        ui.end_row();
-                    }
-                });
-        });
+                }
+            });
     });
 }
 
@@ -324,44 +319,41 @@ pub fn render_traps_panel(
         return;
     }
 
-    card_frame(theme).show(ui, |ui| {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            egui::Grid::new("traps_grid")
-                .striped(true)
-                .spacing([12.0, 6.0])
-                .num_columns(6)
-                .show(ui, |ui| {
-                    ui.strong(tr(lang, TextKey::Timestamp));
-                    ui.strong("Source IP");
-                    ui.strong("Device");
-                    ui.strong("Version");
-                    ui.strong("Trap OID / Name");
-                    ui.strong("Varbinds");
+    table_card(ui, theme, "traps_scroll", |ui| {
+        egui::Grid::new("traps_grid")
+            .spacing([14.0, 8.0])
+            .num_columns(6)
+            .show(ui, |ui| {
+                ui.strong(tr(lang, TextKey::Timestamp));
+                ui.strong("Source IP");
+                ui.strong("Device");
+                ui.strong("Version");
+                ui.strong("Trap OID / Name");
+                ui.strong("Varbinds");
+                ui.end_row();
+                for t in &state.traps {
+                    let ver = v1::SnmpVersion::try_from(t.snmp_version)
+                        .unwrap_or(v1::SnmpVersion::V2c);
+                    let ver_str = match ver {
+                        v1::SnmpVersion::V1 => "v1",
+                        v1::SnmpVersion::V3 => "v3",
+                        _ => "v2c",
+                    };
+                    ui.monospace(fmt_local_ts(t.timestamp_utc));
+                    ui.monospace(&t.source_ip);
+                    ui.strong(&t.device_name);
+                    ui.monospace(ver_str);
+                    ui.label(format!("{} ({})", t.trap_name, t.trap_oid));
+                    let summary = t
+                        .varbinds
+                        .iter()
+                        .map(|vb| format!("{}={}", vb.oid_name, vb.value))
+                        .collect::<Vec<_>>()
+                        .join("; ");
+                    ui.label(summary);
                     ui.end_row();
-                    for t in &state.traps {
-                        let ver = v1::SnmpVersion::try_from(t.snmp_version)
-                            .unwrap_or(v1::SnmpVersion::V2c);
-                        let ver_str = match ver {
-                            v1::SnmpVersion::V1 => "v1",
-                            v1::SnmpVersion::V3 => "v3",
-                            _ => "v2c",
-                        };
-                        ui.monospace(fmt_local_ts(t.timestamp_utc));
-                        ui.monospace(&t.source_ip);
-                        ui.strong(&t.device_name);
-                        ui.monospace(ver_str);
-                        ui.label(format!("{} ({})", t.trap_name, t.trap_oid));
-                        let summary = t
-                            .varbinds
-                            .iter()
-                            .map(|vb| format!("{}={}", vb.oid_name, vb.value))
-                            .collect::<Vec<_>>()
-                            .join("; ");
-                        ui.label(summary);
-                        ui.end_row();
-                    }
-                });
-        });
+                }
+            });
     });
 }
 
@@ -429,18 +421,20 @@ pub fn render_charts_panel(
                         }
                     }
                 });
-            for (preset, lbl) in [
-                (ChartRangePreset::Hour1, "1h"),
-                (ChartRangePreset::Hour6, "6h"),
-                (ChartRangePreset::Hour24, "24h"),
-                (ChartRangePreset::Day7, "7d"),
-                (ChartRangePreset::Day30, "30d"),
-                (ChartRangePreset::CustomHours, "Custom(h)"),
-            ] {
-                if ui.selectable_value(&mut obs.chart_range, preset, lbl).changed() {
-                    trigger_reload = true;
+            segmented_track(ui, theme, |ui| {
+                for (preset, lbl) in [
+                    (ChartRangePreset::Hour1, "1h"),
+                    (ChartRangePreset::Hour6, "6h"),
+                    (ChartRangePreset::Hour24, "24h"),
+                    (ChartRangePreset::Day7, "7d"),
+                    (ChartRangePreset::Day30, "30d"),
+                    (ChartRangePreset::CustomHours, "Custom"),
+                ] {
+                    if segmented_value(ui, theme, &mut obs.chart_range, preset, lbl) {
+                        trigger_reload = true;
+                    }
                 }
-            }
+            });
             if obs.chart_range == ChartRangePreset::CustomHours {
                 ui.add(egui::DragValue::new(&mut obs.custom_hours).range(1..=720));
             }
@@ -449,7 +443,7 @@ pub fn render_charts_panel(
             if ui.button(tr(lang, TextKey::Refresh)).clicked() {
                 trigger_reload = true;
             }
-            if ui.button("+ Chart").clicked() {
+            if primary_button(ui, theme, true, "+ Chart").clicked() {
                 obs.show_new_chart_modal = true;
                 obs.new_chart_name.clear();
             }
@@ -542,100 +536,99 @@ pub fn render_charts_panel(
     }
 
     if obs.show_new_chart_modal {
-        let mut open = true;
-        egui::Window::new(tr(lang, TextKey::PanelCharts))
-            .open(&mut open)
-            .min_width(380.0)
-            .show(ctx, |ui| {
-                egui::Grid::new("new_chart_form")
-                    .num_columns(2)
-                    .spacing([12.0, 8.0])
-                    .show(ui, |ui| {
-                        ui.label(tr(lang, TextKey::Name));
-                        ui.text_edit_singleline(&mut obs.new_chart_name);
-                        ui.end_row();
+        let mut save_clicked = false;
+        let mut cancel_clicked = false;
+        centered_modal(pick_lang(lang, "Grafik Baru", "New Chart"), 400.0).show(ctx, |ui| {
+            egui::Grid::new("new_chart_form")
+                .num_columns(2)
+                .spacing([14.0, 10.0])
+                .show(ui, |ui| {
+                    ui.label(tr(lang, TextKey::Name));
+                    ui.text_edit_singleline(&mut obs.new_chart_name);
+                    ui.end_row();
 
-                        ui.label("Service Source");
-                        egui::ComboBox::from_id_salt("chart_svc_src")
-                            .selected_text(
-                                obs.new_chart_service_id
-                                    .and_then(|id| state.services.get(&id))
-                                    .map_or("None", |s| s.name.as_str()),
-                            )
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut obs.new_chart_service_id, None, "None");
-                                for s in state.services.values() {
-                                    let dname = state
-                                        .devices
-                                        .get(&s.device_id)
-                                        .map_or("?", |d| d.name.as_str());
-                                    ui.selectable_value(
-                                        &mut obs.new_chart_service_id,
-                                        Some(s.id),
-                                        format!("{dname}: {}", s.name),
-                                    );
-                                }
-                            });
-                        ui.end_row();
+                    ui.label("Service Source");
+                    egui::ComboBox::from_id_salt("chart_svc_src")
+                        .selected_text(
+                            obs.new_chart_service_id
+                                .and_then(|id| state.services.get(&id))
+                                .map_or("None", |s| s.name.as_str()),
+                        )
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut obs.new_chart_service_id, None, "None");
+                            for s in state.services.values() {
+                                let dname = state
+                                    .devices
+                                    .get(&s.device_id)
+                                    .map_or("?", |d| d.name.as_str());
+                                ui.selectable_value(
+                                    &mut obs.new_chart_service_id,
+                                    Some(s.id),
+                                    format!("{dname}: {}", s.name),
+                                );
+                            }
+                        });
+                    ui.end_row();
 
-                        ui.label("Link Source");
-                        egui::ComboBox::from_id_salt("chart_link_src")
-                            .selected_text(
-                                obs.new_chart_link_id
-                                    .map_or("None".to_string(), |id| format!("Link #{id}")),
-                            )
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut obs.new_chart_link_id, None, "None");
-                                for l in state.links.values() {
-                                    ui.selectable_value(
-                                        &mut obs.new_chart_link_id,
-                                        Some(l.id),
-                                        format!("Link #{} ({})", l.id, l.interface_key),
-                                    );
-                                }
-                            });
-                        ui.end_row();
+                    ui.label("Link Source");
+                    egui::ComboBox::from_id_salt("chart_link_src")
+                        .selected_text(
+                            obs.new_chart_link_id
+                                .map_or("None".to_string(), |id| format!("Link #{id}")),
+                        )
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut obs.new_chart_link_id, None, "None");
+                            for l in state.links.values() {
+                                ui.selectable_value(
+                                    &mut obs.new_chart_link_id,
+                                    Some(l.id),
+                                    format!("Link #{} ({})", l.id, l.interface_key),
+                                );
+                            }
+                        });
+                    ui.end_row();
 
-                        ui.label("Metric");
-                        egui::ComboBox::from_id_salt("chart_metric_cb")
-                            .selected_text(&obs.new_chart_metric)
-                            .show_ui(ui, |ui| {
-                                for m in ["value", "rtt", "in_bps", "out_bps", "util_pct"] {
-                                    ui.selectable_value(
-                                        &mut obs.new_chart_metric,
-                                        m.to_string(),
-                                        m,
-                                    );
-                                }
-                            });
-                        ui.end_row();
-                    });
-                ui.add_space(6.0);
-                if ui
-                    .add_enabled(
-                        !obs.new_chart_name.trim().is_empty(),
-                        egui::Button::new(tr(lang, TextKey::Save)),
-                    )
-                    .clicked()
-                {
-                    let chart = v1::ChartDefinition {
-                        id: 0,
-                        version: 1,
-                        name: obs.new_chart_name.trim().to_string(),
-                        sources: vec![v1::ChartSeriesSource {
-                            id: 1,
-                            label: obs.new_chart_name.trim().to_string(),
-                            service_id: obs.new_chart_service_id,
-                            link_id: obs.new_chart_link_id,
-                            metric: obs.new_chart_metric.clone(),
-                            color_hex: "#38BDF8".to_string(),
-                        }],
-                    };
-                    let _ = cmd_tx.try_send(ClientCommand::SaveChart(chart));
-                    obs.show_new_chart_modal = false;
-                }
-            });
-        if !open {
+                    ui.label("Metric");
+                    egui::ComboBox::from_id_salt("chart_metric_cb")
+                        .selected_text(&obs.new_chart_metric)
+                        .show_ui(ui, |ui| {
+                            for m in ["value", "rtt", "in_bps", "out_bps", "util_pct"] {
+                                ui.selectable_value(
+                                    &mut obs.new_chart_metric,
+                                    m.to_string(),
+                                    m,
+                                );
+                            }
+                        });
+                    ui.end_row();
+                });
+            ui.add_space(10.0);
+            let valid = !obs.new_chart_name.trim().is_empty();
+            (save_clicked, cancel_clicked) = modal_footer_buttons(
+                ui,
+                theme,
+                valid,
+                tr(lang, TextKey::Save),
+                tr(lang, TextKey::Cancel),
+            );
+        });
+        if save_clicked {
+            let chart = v1::ChartDefinition {
+                id: 0,
+                version: 1,
+                name: obs.new_chart_name.trim().to_string(),
+                sources: vec![v1::ChartSeriesSource {
+                    id: 1,
+                    label: obs.new_chart_name.trim().to_string(),
+                    service_id: obs.new_chart_service_id,
+                    link_id: obs.new_chart_link_id,
+                    metric: obs.new_chart_metric.clone(),
+                    color_hex: "#0A84FF".to_string(),
+                }],
+            };
+            let _ = cmd_tx.try_send(ClientCommand::SaveChart(chart));
+            obs.show_new_chart_modal = false;
+        } else if cancel_clicked {
             obs.show_new_chart_modal = false;
         }
     }

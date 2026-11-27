@@ -1,7 +1,8 @@
 use crate::panels::inventory::fmt_local_ts;
 use crate::platform::{set_autostart_registry, set_prevent_sleep};
 use crate::ui_kit::{
-    card_frame, empty_state_card, muted_color, pick_lang, section_heading, status_pill,
+    card_frame, danger_button, empty_state_card, hairline_separator, muted_color, pick_lang,
+    primary_button, section_heading, segmented_track, segmented_value, status_pill, table_card,
     toolbar_frame,
 };
 use eframe::egui;
@@ -71,29 +72,26 @@ pub fn render_history_actions_panel(
         return;
     }
 
-    card_frame(theme).show(ui, |ui| {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            egui::Grid::new("history_grid")
-                .striped(true)
-                .spacing([12.0, 6.0])
-                .num_columns(5)
-                .show(ui, |ui| {
-                    ui.strong(tr(lang, TextKey::Timestamp));
-                    ui.strong(tr(lang, TextKey::Username));
-                    ui.strong(tr(lang, TextKey::Action));
-                    ui.strong("Target");
-                    ui.strong("Details");
+    table_card(ui, theme, "history_scroll", |ui| {
+        egui::Grid::new("history_grid")
+            .spacing([16.0, 10.0])
+            .num_columns(5)
+            .show(ui, |ui| {
+                ui.strong(tr(lang, TextKey::Timestamp));
+                ui.strong(tr(lang, TextKey::Username));
+                ui.strong(tr(lang, TextKey::Action));
+                ui.strong("Target");
+                ui.strong("Details");
+                ui.end_row();
+                for h in &admin_st.history_actions {
+                    ui.monospace(fmt_local_ts(h.timestamp_utc));
+                    ui.strong(&h.username);
+                    ui.monospace(&h.action);
+                    ui.monospace(format!("{}:{}", h.target_type, h.target_id));
+                    ui.label(&h.details);
                     ui.end_row();
-                    for h in &admin_st.history_actions {
-                        ui.monospace(fmt_local_ts(h.timestamp_utc));
-                        ui.strong(&h.username);
-                        ui.monospace(&h.action);
-                        ui.monospace(format!("{}:{}", h.target_type, h.target_id));
-                        ui.label(&h.details);
-                        ui.end_row();
-                    }
-                });
-        });
+                }
+            });
     });
 }
 
@@ -128,32 +126,29 @@ pub fn render_active_admins_panel(
         return;
     }
 
-    card_frame(theme).show(ui, |ui| {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            egui::Grid::new("active_admins_grid")
-                .striped(true)
-                .spacing([12.0, 6.0])
-                .num_columns(5)
-                .show(ui, |ui| {
-                    ui.strong(tr(lang, TextKey::Username));
-                    ui.strong("Remote Addr");
-                    ui.strong("Client");
-                    ui.strong("Connected");
-                    ui.strong(tr(lang, TextKey::Action));
-                    ui.end_row();
-                    for s in &admin_st.active_sessions {
-                        ui.strong(&s.username);
-                        ui.monospace(&s.remote_addr);
-                        ui.label(&s.client_info);
-                        ui.monospace(fmt_local_ts(s.connected_utc));
-                        if ui.button(tr(lang, TextKey::KickSession)).clicked() {
-                            let _ = cmd_tx
-                                .try_send(ClientCommand::KickAdminSession(s.session_id.clone()));
-                        }
-                        ui.end_row();
+    table_card(ui, theme, "active_admins_scroll", |ui| {
+        egui::Grid::new("active_admins_grid")
+            .spacing([16.0, 10.0])
+            .num_columns(5)
+            .show(ui, |ui| {
+                ui.strong(tr(lang, TextKey::Username));
+                ui.strong("Remote Addr");
+                ui.strong("Client");
+                ui.strong("Connected");
+                ui.strong(tr(lang, TextKey::Action));
+                ui.end_row();
+                for s in &admin_st.active_sessions {
+                    ui.strong(&s.username);
+                    ui.monospace(&s.remote_addr);
+                    ui.label(&s.client_info);
+                    ui.monospace(fmt_local_ts(s.connected_utc));
+                    if danger_button(ui, theme, tr(lang, TextKey::KickSession)).clicked() {
+                        let _ = cmd_tx
+                            .try_send(ClientCommand::KickAdminSession(s.session_id.clone()));
                     }
-                });
-        });
+                    ui.end_row();
+                }
+            });
     });
 }
 
@@ -195,10 +190,7 @@ pub fn render_admins_groups_panel(
                 });
             let valid = !admin_st.new_admin_username.trim().is_empty()
                 && admin_st.new_admin_password.len() >= 8;
-            if ui
-                .add_enabled(valid, egui::Button::new("+ Admin"))
-                .clicked()
-            {
+            if primary_button(ui, theme, valid, "+ Admin").clicked() {
                 let _ = cmd_tx.try_send(ClientCommand::SaveAdmin(v1::AdminUser {
                     id: 0,
                     version: 1,
@@ -215,10 +207,9 @@ pub fn render_admins_groups_panel(
     });
     ui.add_space(6.0);
 
-    card_frame(theme).show(ui, |ui| {
+    table_card(ui, theme, "admins_list_scroll", |ui| {
         egui::Grid::new("admins_list_grid")
-            .striped(true)
-            .spacing([14.0, 6.0])
+            .spacing([16.0, 10.0])
             .num_columns(4)
             .show(ui, |ui| {
                 ui.strong(tr(lang, TextKey::Username));
@@ -242,7 +233,7 @@ pub fn render_admins_groups_panel(
                             state_color(theme, v1::ProbeState::Down),
                         );
                     }
-                    if ui.button(tr(lang, TextKey::Delete)).clicked() {
+                    if danger_button(ui, theme, tr(lang, TextKey::Delete)).clicked() {
                         let _ = cmd_tx.try_send(ClientCommand::DeleteAdmin(v1::IdRequest {
                             id: a.id,
                             expected_version: a.version,
@@ -256,8 +247,9 @@ pub fn render_admins_groups_panel(
     ui.add_space(8.0);
     card_frame(theme).show(ui, |ui| {
         ui.strong("Admin Groups & Permissions");
-        ui.add_space(4.0);
-        for g in &mut admin_st.groups {
+        ui.add_space(6.0);
+        let group_count = admin_st.groups.len();
+        for (idx, g) in admin_st.groups.iter_mut().enumerate() {
             let group_name = g.name.clone();
             ui.collapsing(&group_name, |ui| {
                 for perm in Permission::ALL {
@@ -271,10 +263,14 @@ pub fn render_admins_groups_panel(
                         }
                     }
                 }
-                if ui.button(tr(lang, TextKey::Save)).clicked() {
+                ui.add_space(4.0);
+                if primary_button(ui, theme, true, tr(lang, TextKey::Save)).clicked() {
                     let _ = cmd_tx.try_send(ClientCommand::SaveAdminGroup(g.clone()));
                 }
             });
+            if idx + 1 < group_count {
+                hairline_separator(ui, theme);
+            }
         }
     });
 }
@@ -300,10 +296,7 @@ pub fn render_notifications_panel(
             ui.add(egui::TextEdit::singleline(&mut admin_st.new_tg_token).password(true));
             let valid = !admin_st.new_tg_chat_id.trim().is_empty()
                 && !admin_st.new_tg_token.trim().is_empty();
-            if ui
-                .add_enabled(valid, egui::Button::new("+ Telegram Channel"))
-                .clicked()
-            {
+            if primary_button(ui, theme, valid, "+ Telegram Channel").clicked() {
                 let _ = cmd_tx.try_send(ClientCommand::SaveNotificationChannel(
                     v1::NotificationChannel {
                         id: 0,
@@ -327,10 +320,9 @@ pub fn render_notifications_panel(
     });
     ui.add_space(6.0);
 
-    card_frame(theme).show(ui, |ui| {
+    table_card(ui, theme, "notif_channels_scroll", |ui| {
         egui::Grid::new("notif_channels_grid")
-            .striped(true)
-            .spacing([14.0, 6.0])
+            .spacing([16.0, 10.0])
             .num_columns(5)
             .show(ui, |ui| {
                 ui.strong(tr(lang, TextKey::Name));
@@ -356,7 +348,7 @@ pub fn render_notifications_panel(
                         if ui.button(tr(lang, TextKey::TestSend)).clicked() {
                             let _ = cmd_tx.try_send(ClientCommand::TestNotificationChannel(ch.id));
                         }
-                        if ui.button(tr(lang, TextKey::Delete)).clicked() {
+                        if danger_button(ui, theme, tr(lang, TextKey::Delete)).clicked() {
                             let _ = cmd_tx.try_send(ClientCommand::DeleteNotificationChannel(
                                 v1::IdRequest {
                                     id: ch.id,
@@ -399,61 +391,64 @@ pub fn render_server_settings_panel(
         return;
     };
 
-    card_frame(theme).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.strong("ICMP Socket:");
-            ui.monospace(&s.icmp_status_message);
-        });
-        ui.separator();
-
-        egui::Grid::new("server_settings_grid")
-            .num_columns(2)
-            .spacing([16.0, 8.0])
-            .show(ui, |ui| {
-                ui.label("Global Poll Interval (s)");
-                ui.add(egui::DragValue::new(&mut s.global_poll_interval_sec).range(5..=3600));
-                ui.end_row();
-
-                ui.label("Max Concurrent Probes");
-                ui.add(egui::DragValue::new(&mut s.max_concurrent_probes).range(1..=2048));
-                ui.end_row();
-
-                ui.label("Max Concurrent Per Host");
-                ui.add(egui::DragValue::new(&mut s.max_concurrent_per_host).range(1..=64));
-                ui.end_row();
-
-                ui.label("Flapping Changes / Window (min)");
-                ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::new(&mut s.flapping_changes).range(2..=50));
-                    ui.add(egui::DragValue::new(&mut s.flapping_window_min).range(1..=120));
-                });
-                ui.end_row();
-
-                ui.label("External Syslog Forward (host:port)");
-                ui.text_edit_singleline(&mut s.syslog_forward_addr);
-                ui.end_row();
-
-                ui.label("Retention Raw(h) / Rollup(d) / Events(d) / Syslog(d) / Audit(d)");
-                ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::new(&mut s.retention_raw_hours).range(1..=720));
-                    ui.add(egui::DragValue::new(&mut s.retention_rollup_days).range(1..=3650));
-                    ui.add(egui::DragValue::new(&mut s.retention_events_days).range(1..=3650));
-                    ui.add(egui::DragValue::new(&mut s.retention_syslog_days).range(1..=3650));
-                    ui.add(egui::DragValue::new(&mut s.retention_audit_days).range(1..=3650));
-                });
-                ui.end_row();
+    ui.vertical(|ui| {
+        ui.set_max_width(720.0);
+        card_frame(theme).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.strong("ICMP Socket:");
+                ui.monospace(&s.icmp_status_message);
             });
+            hairline_separator(ui, theme);
 
-        ui.add_space(6.0);
-        ui.checkbox(
-            &mut s.allow_image_url_import,
-            "Allow Image Import from HTTPS URL",
-        );
-        ui.add_space(8.0);
+            egui::Grid::new("server_settings_grid")
+                .num_columns(2)
+                .spacing([18.0, 10.0])
+                .show(ui, |ui| {
+                    ui.label("Global Poll Interval (s)");
+                    ui.add(egui::DragValue::new(&mut s.global_poll_interval_sec).range(5..=3600));
+                    ui.end_row();
 
-        if ui.button(tr(lang, TextKey::Save)).clicked() {
-            let _ = cmd_tx.try_send(ClientCommand::UpdateServerSettings(s.clone()));
-        }
+                    ui.label("Max Concurrent Probes");
+                    ui.add(egui::DragValue::new(&mut s.max_concurrent_probes).range(1..=2048));
+                    ui.end_row();
+
+                    ui.label("Max Concurrent Per Host");
+                    ui.add(egui::DragValue::new(&mut s.max_concurrent_per_host).range(1..=64));
+                    ui.end_row();
+
+                    ui.label("Flapping Changes / Window (min)");
+                    ui.horizontal(|ui| {
+                        ui.add(egui::DragValue::new(&mut s.flapping_changes).range(2..=50));
+                        ui.add(egui::DragValue::new(&mut s.flapping_window_min).range(1..=120));
+                    });
+                    ui.end_row();
+
+                    ui.label("External Syslog Forward (host:port)");
+                    ui.text_edit_singleline(&mut s.syslog_forward_addr);
+                    ui.end_row();
+
+                    ui.label("Retention Raw(h) / Rollup(d) / Events(d) / Syslog(d) / Audit(d)");
+                    ui.horizontal(|ui| {
+                        ui.add(egui::DragValue::new(&mut s.retention_raw_hours).range(1..=720));
+                        ui.add(egui::DragValue::new(&mut s.retention_rollup_days).range(1..=3650));
+                        ui.add(egui::DragValue::new(&mut s.retention_events_days).range(1..=3650));
+                        ui.add(egui::DragValue::new(&mut s.retention_syslog_days).range(1..=3650));
+                        ui.add(egui::DragValue::new(&mut s.retention_audit_days).range(1..=3650));
+                    });
+                    ui.end_row();
+                });
+
+            ui.add_space(6.0);
+            ui.checkbox(
+                &mut s.allow_image_url_import,
+                "Allow Image Import from HTTPS URL",
+            );
+            ui.add_space(10.0);
+
+            if primary_button(ui, theme, true, tr(lang, TextKey::Save)).clicked() {
+                let _ = cmd_tx.try_send(ClientCommand::UpdateServerSettings(s.clone()));
+            }
+        });
     });
 }
 
@@ -468,92 +463,94 @@ pub fn render_client_settings_panel(
     ui.add_space(6.0);
 
     let mut changed = false;
-    card_frame(theme).show(ui, |ui| {
-        egui::Grid::new("client_settings_grid")
-            .num_columns(2)
-            .spacing([16.0, 8.0])
-            .show(ui, |ui| {
-                ui.label(tr(lang, TextKey::LanguageLabel));
-                ui.horizontal(|ui| {
-                    changed |= ui
-                        .selectable_value(
+    ui.vertical(|ui| {
+        ui.set_max_width(720.0);
+        card_frame(theme).show(ui, |ui| {
+            egui::Grid::new("client_settings_grid")
+                .num_columns(2)
+                .spacing([18.0, 10.0])
+                .show(ui, |ui| {
+                    ui.label(tr(lang, TextKey::LanguageLabel));
+                    segmented_track(ui, theme, |ui| {
+                        changed |= segmented_value(
+                            ui,
+                            theme,
                             &mut local_cfg.language,
                             Language::Id,
                             Language::Id.label(),
-                        )
-                        .changed();
-                    changed |= ui
-                        .selectable_value(
+                        );
+                        changed |= segmented_value(
+                            ui,
+                            theme,
                             &mut local_cfg.language,
                             Language::En,
                             Language::En.label(),
-                        )
-                        .changed();
-                });
-                ui.end_row();
+                        );
+                    });
+                    ui.end_row();
 
-                ui.label("Theme");
-                ui.horizontal(|ui| {
-                    changed |= ui
-                        .selectable_value(
+                    ui.label("Theme");
+                    segmented_track(ui, theme, |ui| {
+                        changed |= segmented_value(
+                            ui,
+                            theme,
                             &mut local_cfg.theme,
                             ThemeMode::Dark,
                             tr(lang, TextKey::ThemeDark),
-                        )
-                        .changed();
-                    changed |= ui
-                        .selectable_value(
+                        );
+                        changed |= segmented_value(
+                            ui,
+                            theme,
                             &mut local_cfg.theme,
                             ThemeMode::Light,
                             tr(lang, TextKey::ThemeLight),
-                        )
-                        .changed();
-                });
-                ui.end_row();
-            });
-
-        ui.add_space(6.0);
-        changed |= ui
-            .checkbox(&mut local_cfg.close_to_tray, tr(lang, TextKey::CloseToTray))
-            .changed();
-        if ui
-            .checkbox(&mut local_cfg.prevent_sleep, tr(lang, TextKey::PreventSleep))
-            .changed()
-        {
-            set_prevent_sleep(local_cfg.prevent_sleep);
-            changed = true;
-        }
-        if ui
-            .checkbox(
-                &mut local_cfg.autostart_on_login,
-                tr(lang, TextKey::AutostartLogin),
-            )
-            .changed()
-        {
-            let _ = set_autostart_registry(local_cfg.autostart_on_login);
-            changed = true;
-        }
-        changed |= ui
-            .checkbox(&mut local_cfg.global_mute, tr(lang, TextKey::MuteAlarm))
-            .changed();
-
-        ui.add_space(6.0);
-        ui.separator();
-        ui.strong(tr(lang, TextKey::ExternalToolsTitle));
-        ui.add_space(4.0);
-        egui::Grid::new("external_tools_grid")
-            .num_columns(2)
-            .spacing([14.0, 6.0])
-            .show(ui, |ui| {
-                for key in ["winbox", "ssh", "telnet"] {
-                    let val = local_cfg.external_tools.entry(key.to_string()).or_default();
-                    ui.monospace(key);
-                    if ui.text_edit_singleline(val).changed() {
-                        changed = true;
-                    }
+                        );
+                    });
                     ui.end_row();
-                }
-            });
+                });
+
+            hairline_separator(ui, theme);
+            changed |= ui
+                .checkbox(&mut local_cfg.close_to_tray, tr(lang, TextKey::CloseToTray))
+                .changed();
+            if ui
+                .checkbox(&mut local_cfg.prevent_sleep, tr(lang, TextKey::PreventSleep))
+                .changed()
+            {
+                set_prevent_sleep(local_cfg.prevent_sleep);
+                changed = true;
+            }
+            if ui
+                .checkbox(
+                    &mut local_cfg.autostart_on_login,
+                    tr(lang, TextKey::AutostartLogin),
+                )
+                .changed()
+            {
+                let _ = set_autostart_registry(local_cfg.autostart_on_login);
+                changed = true;
+            }
+            changed |= ui
+                .checkbox(&mut local_cfg.global_mute, tr(lang, TextKey::MuteAlarm))
+                .changed();
+
+            hairline_separator(ui, theme);
+            ui.strong(tr(lang, TextKey::ExternalToolsTitle));
+            ui.add_space(6.0);
+            egui::Grid::new("external_tools_grid")
+                .num_columns(2)
+                .spacing([16.0, 8.0])
+                .show(ui, |ui| {
+                    for key in ["winbox", "ssh", "telnet"] {
+                        let val = local_cfg.external_tools.entry(key.to_string()).or_default();
+                        ui.monospace(key);
+                        if ui.text_edit_singleline(val).changed() {
+                            changed = true;
+                        }
+                        ui.end_row();
+                    }
+                });
+        });
     });
 
     if changed {

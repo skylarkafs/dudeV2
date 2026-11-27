@@ -548,10 +548,20 @@ async fn poll_links_and_interfaces(
     pending_ts: &mut Vec<RawMetricSample>,
     settings: &v1::ServerSettings,
 ) {
-    let mut devices_to_poll: HashSet<i64> = HashSet::new();
+    let mut link_master_devs: HashSet<i64> = HashSet::new();
     for l in links {
         if l.mastering_type == v1::MasteringType::SnmpIfTraffic as i32 && l.master_device_id > 0 {
-            devices_to_poll.insert(l.master_device_id);
+            link_master_devs.insert(l.master_device_id);
+        }
+    }
+    let mut devices_to_poll = link_master_devs.clone();
+    for d in devices {
+        let has_snmp = d
+            .snmp
+            .as_ref()
+            .is_some_and(|s| s.has_community || !s.username.is_empty());
+        if has_snmp && d.aggregate_state != v1::ProbeState::Down as i32 {
+            devices_to_poll.insert(d.id);
         }
     }
     let dev_map: HashMap<i64, &v1::Device> = devices.iter().map(|d| (d.id, d)).collect();
@@ -566,7 +576,12 @@ async fn poll_links_and_interfaces(
             continue;
         };
         let last = last_if_poll.get(&dev_id).copied();
-        if last.is_some_and(|t| now_mono.saturating_duration_since(t) < Duration::from_secs(15)) {
+        let interval = if link_master_devs.contains(&dev_id) {
+            Duration::from_secs(15)
+        } else {
+            Duration::from_secs(120)
+        };
+        if last.is_some_and(|t| now_mono.saturating_duration_since(t) < interval) {
             continue;
         }
         last_if_poll.insert(dev_id, now_mono);

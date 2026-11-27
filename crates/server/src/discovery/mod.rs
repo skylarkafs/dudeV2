@@ -31,6 +31,7 @@ pub struct DiscoveryManager {
 
 #[derive(Debug, Clone)]
 pub struct DiscoveredNeighbor {
+    pub local_port: String,
     pub remote_sys_name: String,
     pub remote_port: String,
     pub remote_ip: Option<String>,
@@ -41,6 +42,33 @@ pub fn decode_lldp_neighbors(
     rem_sys_names: &[Varbind],
     rem_port_ids: &[Varbind],
 ) -> Vec<DiscoveredNeighbor> {
+    decode_lldp_neighbors_with_local(rem_sys_names, rem_port_ids, &[], &[])
+}
+
+pub fn decode_lldp_neighbors_with_local(
+    rem_sys_names: &[Varbind],
+    rem_port_ids: &[Varbind],
+    loc_port_descs: &[Varbind],
+    loc_port_ids: &[Varbind],
+) -> Vec<DiscoveredNeighbor> {
+    let mut loc_ports: HashMap<u32, String> = HashMap::new();
+    for vb in loc_port_ids {
+        if let Some(&port_num) = vb.oid.last() {
+            let val = vb.value.as_string_lossy();
+            if !val.trim().is_empty() {
+                loc_ports.insert(port_num, val.trim().to_string());
+            }
+        }
+    }
+    for vb in loc_port_descs {
+        if let Some(&port_num) = vb.oid.last() {
+            let val = vb.value.as_string_lossy();
+            if !val.trim().is_empty() {
+                loc_ports.insert(port_num, val.trim().to_string());
+            }
+        }
+    }
+
     // lldpRemSysName OID suffix: <timeMark>.<localPortNum>.<remIndex>
     let mut port_by_key: HashMap<Vec<u32>, String> = HashMap::new();
     for vb in rem_port_ids {
@@ -52,10 +80,13 @@ pub fn decode_lldp_neighbors(
     let mut out = Vec::new();
     for vb in rem_sys_names {
         if vb.oid.len() >= 3 {
-            let key = vb.oid[vb.oid.len() - 3..].to_vec();
+            let suffix = &vb.oid[vb.oid.len() - 3..];
+            let local_port_num = suffix[1];
+            let key = suffix.to_vec();
             let remote_sys_name = vb.value.as_string_lossy();
             if !remote_sys_name.is_empty() {
                 out.push(DiscoveredNeighbor {
+                    local_port: loc_ports.get(&local_port_num).cloned().unwrap_or_default(),
                     remote_sys_name,
                     remote_port: port_by_key.get(&key).cloned().unwrap_or_default(),
                     remote_ip: None,
@@ -98,6 +129,7 @@ pub fn decode_cdp_neighbors(
             let name = vb.value.as_string_lossy();
             if !name.is_empty() {
                 out.push(DiscoveredNeighbor {
+                    local_port: String::new(),
                     remote_sys_name: name,
                     remote_port: ports.get(&k).cloned().unwrap_or_default(),
                     remote_ip: addrs.get(&k).cloned(),
@@ -355,7 +387,7 @@ impl DiscoveryManager {
                         candidate_links.push(v1::DiscoveryCandidateLink {
                             src_temp_id: src_tid.clone(),
                             dst_temp_id: dst_tid,
-                            src_interface: String::new(),
+                            src_interface: n.local_port,
                             dst_interface: n.remote_port,
                             protocol: n.protocol,
                         });
@@ -468,7 +500,11 @@ impl DiscoveryManager {
                         dst_device_id: dst_id,
                         master_device_id: src_id,
                         mastering_type: v1::MasteringType::SnmpIfTraffic as i32,
-                        interface_key: cl.dst_interface.clone(),
+                        interface_key: if !cl.src_interface.is_empty() {
+                            cl.src_interface.clone()
+                        } else {
+                            String::new()
+                        },
                         link_type_id: 2, // GigabitEthernet default
                         history_enabled: true,
                         label: cl.protocol.clone(),
@@ -563,7 +599,20 @@ async fn inspect_alive_host(
                 ) {
                     let n_vbs = exec.snmp.walk(&target, &lldp_name).await.unwrap_or_default();
                     let p_vbs = exec.snmp.walk(&target, &lldp_port).await.unwrap_or_default();
-                    neighs.extend(decode_lldp_neighbors(&n_vbs, &p_vbs));
+                    let loc_desc_vbs = match parse_oid("1.0.8802.1.1.2.1.3.7.1.4") {
+                        Ok(o) => exec.snmp.walk(&target, &o).await.unwrap_or_default(),
+                        Err(_) => Vec::new(),
+                    };
+                    let loc_id_vbs = match parse_oid("1.0.8802.1.1.2.1.3.7.1.3") {
+                        Ok(o) => exec.snmp.walk(&target, &o).await.unwrap_or_default(),
+                        Err(_) => Vec::new(),
+                    };
+                    neighs.extend(decode_lldp_neighbors_with_local(
+                        &n_vbs,
+                        &p_vbs,
+                        &loc_desc_vbs,
+                        &loc_id_vbs,
+                    ));
                 }
                 if let (Ok(cdp_id), Ok(cdp_port), Ok(cdp_addr)) = (
                     parse_oid("1.3.6.1.4.1.9.9.23.1.2.1.1.6"),

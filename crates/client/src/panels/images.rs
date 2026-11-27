@@ -1,6 +1,6 @@
 use crate::ui_kit::{
-    accent_rgb, card_frame, empty_state_card, notice_frame, pick_lang, section_heading,
-    toolbar_frame,
+    accent_rgb, card_frame, danger_button, empty_state_card, notice_frame, pick_lang,
+    primary_button, section_heading, table_card, toolbar_frame,
 };
 use eframe::egui;
 use image::{ImageFormat, RgbaImage};
@@ -125,7 +125,7 @@ pub fn render_images_panel(
 
     toolbar_frame(theme).show(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
-            if ui.button(tr(lang, TextKey::UploadFile)).clicked() {
+            if primary_button(ui, theme, true, tr(lang, TextKey::UploadFile)).clicked() {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter("Images", &["png", "jpg", "jpeg", "webp", "svg"])
                     .pick_file()
@@ -215,7 +215,9 @@ pub fn render_images_panel(
                 ui.text_edit_singleline(&mut img_state.import_vendor);
                 ui.label(tr(lang, TextKey::Model));
                 ui.text_edit_singleline(&mut img_state.import_model);
-                if ui.button(tr(lang, TextKey::ImportFromUrl)).clicked() {
+                let valid_url = !img_state.import_url.trim().is_empty();
+                if primary_button(ui, theme, valid_url, tr(lang, TextKey::ImportFromUrl)).clicked()
+                {
                     let _ = cmd_tx.try_send(ClientCommand::ImportImageFromUrl(
                         v1::ImportImageUrlRequest {
                             url: img_state.import_url.clone(),
@@ -242,8 +244,7 @@ pub fn render_images_panel(
             let mut do_upload_all = false;
             let mut clear_all = false;
             egui::Grid::new("bulk_grid")
-                .striped(true)
-                .spacing([10.0, 6.0])
+                .spacing([12.0, 8.0])
                 .num_columns(4)
                 .show(ui, |ui| {
                     ui.strong(tr(lang, TextKey::Name));
@@ -259,9 +260,9 @@ pub fn render_images_panel(
                         ui.end_row();
                     }
                 });
-            ui.add_space(6.0);
+            ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button(tr(lang, TextKey::Apply)).clicked() {
+                if primary_button(ui, theme, true, tr(lang, TextKey::Apply)).clicked() {
                     do_upload_all = true;
                 }
                 if ui.button(tr(lang, TextKey::Cancel)).clicked() {
@@ -295,41 +296,38 @@ pub fn render_images_panel(
         return;
     }
 
-    card_frame(theme).show(ui, |ui| {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            egui::Grid::new("images_library_grid")
-                .striped(true)
-                .spacing([14.0, 8.0])
-                .num_columns(6)
-                .show(ui, |ui| {
-                    ui.strong("Preview");
-                    ui.strong(tr(lang, TextKey::Name));
-                    ui.strong(tr(lang, TextKey::Vendor));
-                    ui.strong(tr(lang, TextKey::Model));
-                    ui.strong("Size");
-                    ui.strong(tr(lang, TextKey::Action));
-                    ui.end_row();
-                    for im in state.images.values() {
-                        let key = format!("img:{}:thumb", im.id);
-                        if let Some(tex) = textures.get(&key) {
-                            ui.image((tex.id(), egui::Vec2::splat(32.0)));
-                        } else {
-                            request_image_cb(im.id, "thumb");
-                            ui.label("...");
-                        }
-                        ui.strong(&im.name);
-                        ui.label(&im.vendor);
-                        ui.label(&im.model);
-                        ui.monospace(format!("{}x{} ({} B)", im.width, im.height, im.byte_size));
-                        if ui.button(tr(lang, TextKey::Delete)).clicked() {
-                            let _ = cmd_tx.try_send(ClientCommand::DeleteImage(v1::IdRequest {
-                                id: im.id,
-                                expected_version: im.version,
-                            }));
-                        }
-                        ui.end_row();
+    table_card(ui, theme, "images_library_scroll", |ui| {
+        egui::Grid::new("images_library_grid")
+            .spacing([16.0, 10.0])
+            .num_columns(6)
+            .show(ui, |ui| {
+                ui.strong("Preview");
+                ui.strong(tr(lang, TextKey::Name));
+                ui.strong(tr(lang, TextKey::Vendor));
+                ui.strong(tr(lang, TextKey::Model));
+                ui.strong("Size");
+                ui.strong(tr(lang, TextKey::Action));
+                ui.end_row();
+                for im in state.images.values() {
+                    let key = format!("img:{}:thumb", im.id);
+                    if let Some(tex) = textures.get(&key) {
+                        ui.image((tex.id(), egui::Vec2::splat(32.0)));
+                    } else {
+                        request_image_cb(im.id, "thumb");
+                        ui.label("...");
                     }
-                });
-        });
+                    ui.strong(&im.name);
+                    ui.label(&im.vendor);
+                    ui.label(&im.model);
+                    ui.monospace(format!("{}x{} ({} B)", im.width, im.height, im.byte_size));
+                    if danger_button(ui, theme, tr(lang, TextKey::Delete)).clicked() {
+                        let _ = cmd_tx.try_send(ClientCommand::DeleteImage(v1::IdRequest {
+                            id: im.id,
+                            expected_version: im.version,
+                        }));
+                    }
+                    ui.end_row();
+                }
+            });
     });
 }

@@ -1,6 +1,8 @@
 use crate::ui_kit::{
-    accent_rgb, link_status_info, muted_color, notice_frame, pick_lang, probe_state_label,
-    status_pill, toolbar_frame,
+    accent_rgb, border_color, centered_modal, hairline_separator, link_status_info,
+    modal_footer_buttons, muted_color, notice_frame, pick_lang, primary_button, probe_state_label,
+    segmented_track, segmented_value, status_pill, surface_fill, text_color, toolbar_frame,
+    warning_rgb,
 };
 use eframe::egui::{self, Color32, FontId, Margin, Painter, Pos2, Rect, Rounding, Sense, Stroke, Vec2};
 use nextdude_client_core::connection::ClientCommand;
@@ -54,11 +56,15 @@ pub struct MapCanvasState {
     pub open_link_dialog: Option<i64>,
     pub open_tool_for_device: Option<(i64, v1::ToolKind)>,
     pub pending_new_device_pos: Option<(f64, f64)>,
+    pub pending_new_link: Option<(i64, i64)>,
     pub pending_open_submap_tab: Option<i64>,
     pub show_new_map_dialog: bool,
     pub new_map_name: String,
     pub export_png_requested: bool,
     pub fit_view_requested: bool,
+    pub show_grid: bool,
+    pub show_link_labels: bool,
+    pub clear_links_requested: bool,
 }
 
 impl Default for MapCanvasState {
@@ -90,11 +96,15 @@ impl Default for MapCanvasState {
             open_link_dialog: None,
             open_tool_for_device: None,
             pending_new_device_pos: None,
+            pending_new_link: None,
             pending_open_submap_tab: None,
             show_new_map_dialog: false,
             new_map_name: String::new(),
             export_png_requested: false,
             fit_view_requested: false,
+            show_grid: false,
+            show_link_labels: true,
+            clear_links_requested: false,
         }
     }
 }
@@ -230,7 +240,7 @@ pub fn render_map_workspace(
         }
     }
 
-    // Map Tabs Bar with per-map device/down summary
+    // Row 1: Map Tabs + Layer / Lock / Snap / Settings strip
     ui.horizontal_wrapped(|ui| {
         let map_ids = state.maps.keys().copied().collect::<Vec<_>>();
         for mid in &map_ids {
@@ -275,54 +285,113 @@ pub fn render_map_workspace(
             canvas.show_new_map_dialog = true;
             canvas.new_map_name.clear();
         }
+
+        if let Some(map_id) = canvas.active_map_id {
+            if let Some(active_map) = state.maps.get(&map_id).cloned() {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button(tr(lang, TextKey::MapSettings)).clicked() {
+                        canvas.show_map_settings = !canvas.show_map_settings;
+                    }
+                    if ui.button(tr(lang, TextKey::MapExportPng)).clicked() {
+                        canvas.export_png_requested = true;
+                    }
+                    ui.checkbox(&mut canvas.show_link_labels, "RX/TX");
+                    ui.checkbox(&mut canvas.show_grid, "Grid");
+                    ui.checkbox(&mut canvas.snap_to_grid, tr(lang, TextKey::MapSnapGrid));
+                    let mut locked = active_map.locked;
+                    if ui.checkbox(&mut locked, tr(lang, TextKey::MapLock)).changed() {
+                        let mut updated = active_map.clone();
+                        updated.locked = locked;
+                        let _ = cmd_tx.try_send(ClientCommand::SaveMap(updated));
+                    }
+                    if active_map.locked {
+                        status_pill(
+                            ui,
+                            pick_lang(lang, "TERKUNCI", "LOCKED"),
+                            warning_rgb(theme),
+                        );
+                    }
+                    segmented_track(ui, theme, |ui| {
+                        segmented_value(
+                            ui,
+                            theme,
+                            &mut canvas.layer_mode,
+                            v1::MapLayerMode::MapLayerBoth,
+                            tr(lang, TextKey::MapLayerBoth),
+                        );
+                        segmented_value(
+                            ui,
+                            theme,
+                            &mut canvas.layer_mode,
+                            v1::MapLayerMode::MapLayerDependencies,
+                            tr(lang, TextKey::MapLayerDependencies),
+                        );
+                        segmented_value(
+                            ui,
+                            theme,
+                            &mut canvas.layer_mode,
+                            v1::MapLayerMode::MapLayerLinks,
+                            tr(lang, TextKey::MapLayerLinks),
+                        );
+                    });
+                });
+            }
+        }
     });
 
     if canvas.show_new_map_dialog {
-        egui::Window::new(tr(lang, TextKey::TabMap))
-            .collapsible(false)
-            .resizable(false)
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(tr(lang, TextKey::Name));
-                    ui.text_edit_singleline(&mut canvas.new_map_name);
-                });
-                ui.add_space(6.0);
-                let valid = !canvas.new_map_name.trim().is_empty();
-                ui.horizontal(|ui| {
-                    if ui
-                        .add_enabled(valid, egui::Button::new(tr(lang, TextKey::Save)))
-                        .clicked()
-                    {
-                        let (d, n, s, st, l) = nextdude_common::proto::default_map_palettes();
-                        let new_map = v1::NetworkMap {
-                            id: 0,
-                            version: 1,
-                            name: canvas.new_map_name.trim().to_string(),
-                            description: String::new(),
-                            poll_interval_sec_override: None,
-                            label_refresh_sec: 5,
-                            device_colors: Some(d),
-                            network_colors: Some(n),
-                            submap_colors: Some(s),
-                            static_colors: Some(st),
-                            link_colors: Some(l),
-                            default_node_shape: v1::NodeShape::RoundedRect as i32,
-                            default_link_thickness: 2.0,
-                            default_link_style: v1::LinkStyle::Curved as i32,
-                            background_image_id: None,
-                            background_scale: 1.0,
-                            background_tile: false,
-                            locked: false,
-                            default_layer: v1::MapLayerMode::MapLayerBoth as i32,
-                        };
-                        let _ = cmd_tx.try_send(ClientCommand::SaveMap(new_map));
-                        canvas.show_new_map_dialog = false;
-                    }
-                    if ui.button(tr(lang, TextKey::Cancel)).clicked() {
-                        canvas.show_new_map_dialog = false;
-                    }
-                });
+        let mut submit = false;
+        let mut cancel = false;
+        centered_modal(pick_lang(lang, "Peta Baru", "New Map"), 340.0).show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(tr(lang, TextKey::Name));
+                let resp = ui.add(
+                    egui::TextEdit::singleline(&mut canvas.new_map_name).desired_width(220.0),
+                );
+                if resp.lost_focus() && ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    submit = true;
+                }
             });
+            ui.add_space(10.0);
+            let valid = !canvas.new_map_name.trim().is_empty();
+            let (s_click, c_click) = modal_footer_buttons(
+                ui,
+                theme,
+                valid,
+                tr(lang, TextKey::Save),
+                tr(lang, TextKey::Cancel),
+            );
+            submit = (submit && valid) || s_click;
+            cancel = c_click;
+        });
+        if submit {
+            let (d, n, s, st, l) = nextdude_common::proto::default_map_palettes();
+            let new_map = v1::NetworkMap {
+                id: 0,
+                version: 1,
+                name: canvas.new_map_name.trim().to_string(),
+                description: String::new(),
+                poll_interval_sec_override: None,
+                label_refresh_sec: 5,
+                device_colors: Some(d),
+                network_colors: Some(n),
+                submap_colors: Some(s),
+                static_colors: Some(st),
+                link_colors: Some(l),
+                default_node_shape: v1::NodeShape::RoundedRect as i32,
+                default_link_thickness: 2.0,
+                default_link_style: v1::LinkStyle::Curved as i32,
+                background_image_id: None,
+                background_scale: 1.0,
+                background_tile: false,
+                locked: false,
+                default_layer: v1::MapLayerMode::MapLayerBoth as i32,
+            };
+            let _ = cmd_tx.try_send(ClientCommand::SaveMap(new_map));
+            canvas.show_new_map_dialog = false;
+        } else if cancel {
+            canvas.show_new_map_dialog = false;
+        }
     }
 
     let Some(map_id) = canvas.active_map_id else {
@@ -334,10 +403,14 @@ pub fn render_map_workspace(
                     egui::RichText::new(tr(lang, TextKey::OnboardingBody))
                         .color(muted_color(theme)),
                 );
-                ui.add_space(10.0);
-                if ui
-                    .button(pick_lang(lang, "+ Buat Peta Pertama", "+ Create First Map"))
-                    .clicked()
+                ui.add_space(12.0);
+                if primary_button(
+                    ui,
+                    theme,
+                    true,
+                    pick_lang(lang, "+ Buat Peta Pertama", "+ Create First Map"),
+                )
+                .clicked()
                 {
                     canvas.show_new_map_dialog = true;
                     canvas.new_map_name = "Main Backbone".to_string();
@@ -350,147 +423,6 @@ pub fn render_map_workspace(
     let Some(active_map) = state.maps.get(&map_id).cloned() else {
         return;
     };
-
-    // Map Toolbar inside styled toolbar frame
-    toolbar_frame(theme).show(ui, |ui| {
-        ui.horizontal_wrapped(|ui| {
-            let tools: &[(MapTool, TextKey)] = &[
-                (MapTool::Select, TextKey::MapToolSelect),
-                (MapTool::AddDevice, TextKey::MapToolAddDevice),
-                (MapTool::AddLink, TextKey::MapToolAddLink),
-                (MapTool::AddNetwork, TextKey::MapToolAddNetwork),
-                (MapTool::AddSubmap, TextKey::MapToolAddSubmap),
-                (MapTool::AddStatic, TextKey::MapToolAddStatic),
-                (MapTool::AddDependency, TextKey::MapToolAddDependency),
-            ];
-            for &(tool, key) in tools {
-                if ui
-                    .selectable_value(&mut canvas.active_tool, tool, tr(lang, key))
-                    .changed()
-                {
-                    canvas.link_source_device = None;
-                    canvas.dependency_parent_device = None;
-                }
-            }
-            ui.separator();
-
-            ui.selectable_value(
-                &mut canvas.layer_mode,
-                v1::MapLayerMode::MapLayerLinks,
-                tr(lang, TextKey::MapLayerLinks),
-            );
-            ui.selectable_value(
-                &mut canvas.layer_mode,
-                v1::MapLayerMode::MapLayerDependencies,
-                tr(lang, TextKey::MapLayerDependencies),
-            );
-            ui.selectable_value(
-                &mut canvas.layer_mode,
-                v1::MapLayerMode::MapLayerBoth,
-                tr(lang, TextKey::MapLayerBoth),
-            );
-            ui.separator();
-
-            let mut locked = active_map.locked;
-            if ui.checkbox(&mut locked, tr(lang, TextKey::MapLock)).changed() {
-                let mut updated = active_map.clone();
-                updated.locked = locked;
-                let _ = cmd_tx.try_send(ClientCommand::SaveMap(updated));
-            }
-            if active_map.locked {
-                status_pill(
-                    ui,
-                    pick_lang(lang, "TERKUNCI", "LOCKED"),
-                    RgbColor::new(245, 158, 11),
-                );
-            }
-            ui.checkbox(&mut canvas.snap_to_grid, tr(lang, TextKey::MapSnapGrid));
-
-            ui.separator();
-            let editable = !active_map.locked;
-            if ui
-                .add_enabled(editable, egui::Button::new(tr(lang, TextKey::MapAutoLayout)))
-                .clicked()
-            {
-                let _ = cmd_tx.try_send(ClientCommand::AutoLayoutMap(v1::AutoLayoutRequest {
-                    map_id,
-                    iterations: 60,
-                }));
-            }
-            if ui
-                .add_enabled(
-                    editable && canvas.selected_devices.len() >= 2,
-                    egui::Button::new(tr(lang, TextKey::MapAlignRow)),
-                )
-                .clicked()
-            {
-                align_selected_devices(state, canvas, AlignMode::Row, cmd_tx);
-            }
-            if ui
-                .add_enabled(
-                    editable && canvas.selected_devices.len() >= 2,
-                    egui::Button::new(tr(lang, TextKey::MapAlignCircle)),
-                )
-                .clicked()
-            {
-                align_selected_devices(state, canvas, AlignMode::Circle, cmd_tx);
-            }
-            if ui
-                .add_enabled(
-                    editable && canvas.selected_devices.len() >= 2,
-                    egui::Button::new(tr(lang, TextKey::MapAlignLine)),
-                )
-                .clicked()
-            {
-                align_selected_devices(state, canvas, AlignMode::Line, cmd_tx);
-            }
-
-            ui.separator();
-            if ui.button(tr(lang, TextKey::MapUndo)).clicked() {
-                let _ = cmd_tx.try_send(ClientCommand::Undo);
-            }
-            if ui.button(tr(lang, TextKey::MapRedo)).clicked() {
-                let _ = cmd_tx.try_send(ClientCommand::Redo);
-            }
-            if ui
-                .add_enabled(
-                    !canvas.selected_devices.is_empty(),
-                    egui::Button::new(tr(lang, TextKey::MapCopy)),
-                )
-                .clicked()
-            {
-                canvas.clipboard_devices = canvas.selected_devices.iter().copied().collect();
-                canvas.clipboard_source_map = Some(map_id);
-            }
-            if ui
-                .add_enabled(
-                    editable && !canvas.clipboard_devices.is_empty(),
-                    egui::Button::new(tr(lang, TextKey::MapPaste)),
-                )
-                .clicked()
-            {
-                if let Some(src_map) = canvas.clipboard_source_map {
-                    let _ = cmd_tx.try_send(ClientCommand::CopyPasteItems(v1::CopyPasteRequest {
-                        source_map_id: src_map,
-                        target_map_id: map_id,
-                        device_ids: canvas.clipboard_devices.clone(),
-                        network_ids: Vec::new(),
-                        static_ids: Vec::new(),
-                        offset_x: 40.0,
-                        offset_y: 40.0,
-                    }));
-                }
-            }
-            if ui.button(tr(lang, TextKey::MapExportPng)).clicked() {
-                canvas.export_png_requested = true;
-            }
-            if ui.button(tr(lang, TextKey::MapSettings)).clicked() {
-                canvas.show_map_settings = !canvas.show_map_settings;
-            }
-        });
-    });
-
-    ui.add_space(4.0);
 
     // Collect map devices once for Find cycling & rendering
     let map_devices: Vec<&v1::Device> = state
@@ -506,72 +438,203 @@ pub fn render_map_workspace(
     let map_device_count = map_devices.len();
     let map_link_count = map_links.len();
 
-    // Find bar + Zoom controls strip
-    ui.horizontal(|ui| {
-        ui.label(tr(lang, TextKey::MapFind));
-        let find_resp = ui.text_edit_singleline(&mut canvas.find_query);
-        let q = canvas.find_query.trim().to_ascii_lowercase();
-        let mut matches: Vec<&v1::Device> = if q.is_empty() {
-            Vec::new()
-        } else {
-            map_devices
-                .iter()
-                .copied()
-                .filter(|d| d.name.to_ascii_lowercase().contains(&q) || d.address.contains(&q))
-                .collect()
-        };
-        matches.sort_by_key(|d| d.id);
+    ui.add_space(4.0);
 
-        if find_resp.changed() {
-            canvas.find_match_index = 0;
-        }
-        let enter_next =
-            find_resp.lost_focus() && ctx.input(|i| i.key_pressed(egui::Key::Enter));
-        let next_clicked = ui
-            .add_enabled(
-                !matches.is_empty(),
-                egui::Button::new(pick_lang(lang, "Berikutnya", "Next")),
-            )
-            .clicked();
-        if !q.is_empty() {
-            ui.label(
-                egui::RichText::new(format!("{} match", matches.len()))
-                    .small()
-                    .color(muted_color(theme)),
+    // Row 2: Calm macOS Map Toolbar (Tools segmented track + Arrange/Edit menus + Find + Zoom)
+    let editable = !active_map.locked;
+    let mut focus_target: Option<(f64, f64)> = None;
+    toolbar_frame(theme).show(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            let tools: &[(MapTool, TextKey)] = &[
+                (MapTool::Select, TextKey::MapToolSelect),
+                (MapTool::AddDevice, TextKey::MapToolAddDevice),
+                (MapTool::AddLink, TextKey::MapToolAddLink),
+                (MapTool::AddNetwork, TextKey::MapToolAddNetwork),
+                (MapTool::AddSubmap, TextKey::MapToolAddSubmap),
+                (MapTool::AddStatic, TextKey::MapToolAddStatic),
+                (MapTool::AddDependency, TextKey::MapToolAddDependency),
+            ];
+            segmented_track(ui, theme, |ui| {
+                for &(tool, key) in tools {
+                    if segmented_value(ui, theme, &mut canvas.active_tool, tool, tr(lang, key)) {
+                        canvas.link_source_device = None;
+                        canvas.dependency_parent_device = None;
+                    }
+                }
+            });
+
+            ui.separator();
+
+            ui.menu_button(pick_lang(lang, "Tata Letak", "Arrange"), |ui| {
+                if ui
+                    .add_enabled(editable, egui::Button::new(tr(lang, TextKey::MapAutoLayout)))
+                    .clicked()
+                {
+                    let _ = cmd_tx.try_send(ClientCommand::AutoLayoutMap(v1::AutoLayoutRequest {
+                        map_id,
+                        iterations: 60,
+                    }));
+                    ui.close_menu();
+                }
+                hairline_separator(ui, theme);
+                let align_enabled = editable && canvas.selected_devices.len() >= 2;
+                if ui
+                    .add_enabled(align_enabled, egui::Button::new(tr(lang, TextKey::MapAlignRow)))
+                    .clicked()
+                {
+                    align_selected_devices(state, canvas, AlignMode::Row, cmd_tx);
+                    ui.close_menu();
+                }
+                if ui
+                    .add_enabled(
+                        align_enabled,
+                        egui::Button::new(tr(lang, TextKey::MapAlignCircle)),
+                    )
+                    .clicked()
+                {
+                    align_selected_devices(state, canvas, AlignMode::Circle, cmd_tx);
+                    ui.close_menu();
+                }
+                if ui
+                    .add_enabled(align_enabled, egui::Button::new(tr(lang, TextKey::MapAlignLine)))
+                    .clicked()
+                {
+                    align_selected_devices(state, canvas, AlignMode::Line, cmd_tx);
+                    ui.close_menu();
+                }
+            });
+
+            ui.menu_button(pick_lang(lang, "Sunting", "Edit"), |ui| {
+                if ui.button(tr(lang, TextKey::MapUndo)).clicked() {
+                    let _ = cmd_tx.try_send(ClientCommand::Undo);
+                    ui.close_menu();
+                }
+                if ui.button(tr(lang, TextKey::MapRedo)).clicked() {
+                    let _ = cmd_tx.try_send(ClientCommand::Redo);
+                    ui.close_menu();
+                }
+                hairline_separator(ui, theme);
+                if ui
+                    .add_enabled(
+                        !canvas.selected_devices.is_empty(),
+                        egui::Button::new(tr(lang, TextKey::MapCopy)),
+                    )
+                    .clicked()
+                {
+                    canvas.clipboard_devices = canvas.selected_devices.iter().copied().collect();
+                    canvas.clipboard_source_map = Some(map_id);
+                    ui.close_menu();
+                }
+                if ui
+                    .add_enabled(
+                        editable && !canvas.clipboard_devices.is_empty(),
+                        egui::Button::new(tr(lang, TextKey::MapPaste)),
+                    )
+                    .clicked()
+                {
+                    if let Some(src_map) = canvas.clipboard_source_map {
+                        let _ = cmd_tx.try_send(ClientCommand::CopyPasteItems(
+                            v1::CopyPasteRequest {
+                                source_map_id: src_map,
+                                target_map_id: map_id,
+                                device_ids: canvas.clipboard_devices.clone(),
+                                network_ids: Vec::new(),
+                                static_ids: Vec::new(),
+                                offset_x: 40.0,
+                                offset_y: 40.0,
+                            },
+                        ));
+                    }
+                    ui.close_menu();
+                }
+                if editable {
+                    hairline_separator(ui, theme);
+                    if ui
+                        .button(pick_lang(
+                            lang,
+                            "Hapus Semua Link Peta...",
+                            "Clear Map Links...",
+                        ))
+                        .clicked()
+                    {
+                        canvas.clear_links_requested = true;
+                        ui.close_menu();
+                    }
+                }
+            });
+
+            ui.separator();
+
+            // Inline Find & Zoom
+            let find_resp = ui.add(
+                egui::TextEdit::singleline(&mut canvas.find_query)
+                    .hint_text(tr(lang, TextKey::MapFind))
+                    .desired_width(120.0),
             );
-        }
+            let q = canvas.find_query.trim().to_ascii_lowercase();
+            let mut matches: Vec<&v1::Device> = if q.is_empty() {
+                Vec::new()
+            } else {
+                map_devices
+                    .iter()
+                    .copied()
+                    .filter(|d| d.name.to_ascii_lowercase().contains(&q) || d.address.contains(&q))
+                    .collect()
+            };
+            matches.sort_by_key(|d| d.id);
 
-        if (find_resp.changed() || enter_next || next_clicked) && !matches.is_empty() {
-            if next_clicked || enter_next {
-                canvas.find_match_index = (canvas.find_match_index + 1) % matches.len();
+            if find_resp.changed() {
+                canvas.find_match_index = 0;
             }
-            if let Some(dev) = matches.get(canvas.find_match_index % matches.len()) {
-                canvas.clear_selection();
-                canvas.selected_devices.insert(dev.id);
-                let avail = ui.available_rect_before_wrap();
-                canvas.focus_world_point(avail, dev.pos_x, dev.pos_y);
-            }
-        }
+            let enter_next =
+                find_resp.lost_focus() && ctx.input(|i| i.key_pressed(egui::Key::Enter));
+            let next_clicked = if !q.is_empty() {
+                ui.label(
+                    egui::RichText::new(format!("{}", matches.len()))
+                        .small()
+                        .color(muted_color(theme)),
+                );
+                ui.add_enabled(
+                    !matches.is_empty(),
+                    egui::Button::new(pick_lang(lang, ">", "Next")),
+                )
+                .clicked()
+            } else {
+                false
+            };
 
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if (find_resp.changed() || enter_next || next_clicked) && !matches.is_empty() {
+                if next_clicked || enter_next {
+                    canvas.find_match_index = (canvas.find_match_index + 1) % matches.len();
+                }
+                if let Some(dev) = matches.get(canvas.find_match_index % matches.len()) {
+                    canvas.clear_selection();
+                    canvas.selected_devices.insert(dev.id);
+                    focus_target = Some((dev.pos_x, dev.pos_y));
+                }
+            }
+
+            ui.separator();
+            if ui.button("-").clicked() {
+                canvas.zoom_out();
+            }
+            ui.monospace(format!("{:.0}%", canvas.zoom * 100.0));
+            if ui.button("+").clicked() {
+                canvas.zoom_in();
+            }
+            if ui.button("100%").clicked() {
+                canvas.reset_view();
+            }
             if ui
                 .button(pick_lang(lang, "Sesuaikan", "Fit"))
                 .clicked()
             {
                 canvas.fit_view_requested = true;
             }
-            if ui.button("100%").clicked() {
-                canvas.reset_view();
-            }
-            if ui.button("+").clicked() {
-                canvas.zoom_in();
-            }
-            ui.monospace(format!("{:.0}%", canvas.zoom * 100.0));
-            if ui.button("-").clicked() {
-                canvas.zoom_out();
-            }
         });
     });
+
+    ui.add_space(6.0);
 
     if canvas.export_png_requested {
         canvas.export_png_requested = false;
@@ -586,6 +649,9 @@ pub fn render_map_workspace(
 
     // Allocate interactive canvas
     let avail = ui.available_rect_before_wrap();
+    if let Some((wx, wy)) = focus_target {
+        canvas.focus_world_point(avail, wx, wy);
+    }
     if canvas.fit_view_requested {
         canvas.fit_view_requested = false;
         canvas.fit_to_devices(avail, &map_devices);
@@ -613,10 +679,15 @@ pub fn render_map_workspace(
     }
 
     let bg_col = match theme {
-        ThemeMode::Dark => Color32::from_rgb(13, 20, 36),
-        ThemeMode::Light => Color32::from_rgb(241, 245, 249),
+        ThemeMode::Dark => Color32::from_rgb(22, 22, 25),
+        ThemeMode::Light => Color32::from_rgb(247, 247, 249),
     };
-    painter.rect_filled(canvas_rect, 0.0, bg_col);
+    painter.rect_filled(canvas_rect, Rounding::same(5.0), bg_col);
+    painter.rect_stroke(
+        canvas_rect,
+        Rounding::same(5.0),
+        Stroke::new(1.0_f32, border_color(theme)),
+    );
 
     // Optional background image (scaled & tiled)
     if let Some(bg_img_id) = active_map.background_image_id {
@@ -655,12 +726,12 @@ pub fn render_map_workspace(
         }
     }
 
-    // Subtle grid when zoomed in enough
-    if canvas.zoom >= 0.45 {
-        let step = 32.0 * canvas.zoom;
+    // Whisper-quiet grid lines only when enabled
+    if canvas.show_grid && canvas.zoom >= 0.45 {
+        let step = 48.0 * canvas.zoom;
         let grid_col = match theme {
-            ThemeMode::Dark => Color32::from_rgba_unmultiplied(51, 65, 85, 55),
-            ThemeMode::Light => Color32::from_rgba_unmultiplied(148, 163, 184, 65),
+            ThemeMode::Dark => Color32::from_rgba_unmultiplied(255, 255, 255, 6),
+            ThemeMode::Light => Color32::from_rgba_unmultiplied(0, 0, 0, 8),
         };
         let mut gx = origin.x + (canvas.pan.x % step);
         while gx < canvas_rect.max.x {
@@ -725,14 +796,8 @@ pub fn render_map_workspace(
             && y <= world_max.y + cull_margin
     };
 
-    let text_primary = match theme {
-        ThemeMode::Dark => Color32::from_rgb(226, 232, 240),
-        ThemeMode::Light => Color32::from_rgb(15, 23, 42),
-    };
-    let node_fill = match theme {
-        ThemeMode::Dark => Color32::from_rgb(24, 34, 56),
-        ThemeMode::Light => Color32::from_rgb(255, 255, 255),
-    };
+    let text_primary = text_color(theme);
+    let node_fill = surface_fill(theme);
 
     // Draw Static Items & Map Networks (background layers)
     for st_item in state.static_items.values().filter(|s| s.map_id == map_id) {
@@ -916,22 +981,26 @@ pub fn render_map_workspace(
             }
 
             let in_col = match lstatus {
-                v1::LinkStatus::Down => to_color32(RgbColor::new(239, 68, 68), alpha),
-                v1::LinkStatus::NoReply => to_color32(RgbColor::new(245, 158, 11), alpha),
-                v1::LinkStatus::Flapping => to_color32(RgbColor::new(168, 85, 247), alpha),
-                v1::LinkStatus::Unknown => to_color32(RgbColor::new(148, 163, 184), alpha),
+                v1::LinkStatus::Down => to_color32(state_color(theme, v1::ProbeState::Down), alpha),
+                v1::LinkStatus::NoReply => to_color32(warning_rgb(theme), alpha),
+                v1::LinkStatus::Flapping => to_color32(RgbColor::new(191, 90, 242), alpha),
+                v1::LinkStatus::Unknown => Color32::from_rgba_unmultiplied(125, 130, 140, 110),
                 _ => to_color32(utilization_color(theme, link.in_utilization_pct), alpha),
             };
             let out_col = match lstatus {
-                v1::LinkStatus::Down => to_color32(RgbColor::new(239, 68, 68), alpha),
-                v1::LinkStatus::NoReply => to_color32(RgbColor::new(245, 158, 11), alpha),
-                v1::LinkStatus::Flapping => to_color32(RgbColor::new(168, 85, 247), alpha),
-                v1::LinkStatus::Unknown => to_color32(RgbColor::new(148, 163, 184), alpha),
+                v1::LinkStatus::Down => to_color32(state_color(theme, v1::ProbeState::Down), alpha),
+                v1::LinkStatus::NoReply => to_color32(warning_rgb(theme), alpha),
+                v1::LinkStatus::Flapping => to_color32(RgbColor::new(191, 90, 242), alpha),
+                v1::LinkStatus::Unknown => Color32::from_rgba_unmultiplied(125, 130, 140, 110),
                 _ => to_color32(utilization_color(theme, link.out_utilization_pct), alpha),
             };
 
             let is_selected = canvas.selected_links.contains(&link.id);
-            let stroke_w = if is_selected { thickness + 2.0 } else { thickness };
+            let stroke_w = if is_selected {
+                thickness + 1.5
+            } else {
+                (thickness * 0.85).max(1.2)
+            };
             let to_screen_pts = |pts: &[Vec2d]| -> Vec<Pos2> {
                 pts.iter()
                     .map(|p| canvas.world_to_screen(origin, p.x, p.y))
@@ -968,35 +1037,56 @@ pub fn render_map_workspace(
                     computed.active_handle.y,
                 );
                 if is_selected {
-                    painter.circle_filled(h_pos, 5.5, Color32::WHITE);
+                    painter.circle_filled(h_pos, 5.0, Color32::WHITE);
                     painter.circle_stroke(
                         h_pos,
-                        5.5,
-                        Stroke::new(1.5_f32, Color32::from_rgb(14, 165, 233)),
+                        5.0,
+                        Stroke::new(1.5_f32, to_color32(accent_rgb(theme), 255)),
                     );
                 }
                 if lstatus == v1::LinkStatus::NoReply {
                     let m_pos =
                         canvas.world_to_screen(origin, computed.midpoint.x, computed.midpoint.y);
-                    painter.circle_filled(m_pos, 7.0, Color32::from_rgb(245, 158, 11));
+                    painter.circle_filled(m_pos, 6.5, to_color32(warning_rgb(theme), 255));
                     painter.text(
                         m_pos,
                         egui::Align2::CENTER_CENTER,
                         "!",
-                        FontId::proportional(11.0),
+                        FontId::proportional(10.5),
                         Color32::BLACK,
                     );
                 }
             }
 
-            if canvas.zoom >= 0.55 {
-                let lbl = format!(
-                    "{}/{} ({:.0}%/{:.0}%)",
-                    format_bps(link.in_bps),
-                    format_bps(link.out_bps),
-                    link.in_utilization_pct,
-                    link.out_utilization_pct
-                );
+            let has_link_data = !link.interface_key.is_empty()
+                || link.in_bps > 0.0
+                || link.out_bps > 0.0
+                || !link.label.is_empty();
+            if canvas.show_link_labels && canvas.zoom >= 0.55 && has_link_data {
+                let lbl = if !link.interface_key.is_empty() {
+                    if canvas.zoom >= 0.85 {
+                        format!(
+                            "[{}] RX {} | TX {}",
+                            link.interface_key,
+                            format_bps(link.in_bps),
+                            format_bps(link.out_bps)
+                        )
+                    } else {
+                        format!(
+                            "RX {} | TX {}",
+                            format_bps(link.in_bps),
+                            format_bps(link.out_bps)
+                        )
+                    }
+                } else if !link.label.is_empty() {
+                    link.label.clone()
+                } else {
+                    format!(
+                        "RX {} | TX {}",
+                        format_bps(link.in_bps),
+                        format_bps(link.out_bps)
+                    )
+                };
                 label_anchors.push((link.id, computed.midpoint, lbl));
             }
 
@@ -1008,22 +1098,24 @@ pub fn render_map_workspace(
             ));
         }
 
-        // Draw mid-link traffic labels with simple overlap avoidance
+        // Draw mid-link RX/TX labels with crisp solid backing
         let mut anchor_pts: Vec<Vec2d> = label_anchors.iter().map(|(_, p, _)| *p).collect();
         avoid_label_overlaps(
             &mut anchor_pts,
-            110.0 / f64::from(canvas.zoom),
+            115.0 / f64::from(canvas.zoom),
             18.0 / f64::from(canvas.zoom),
         );
+        let lbl_bg = surface_fill(theme).gamma_multiply(0.92);
         for ((_, _, lbl), pos) in label_anchors.into_iter().zip(anchor_pts) {
             let sp = canvas.world_to_screen(origin, pos.x, pos.y);
-            let bg = match theme {
-                ThemeMode::Dark => Color32::from_rgba_unmultiplied(15, 23, 42, 220),
-                ThemeMode::Light => Color32::from_rgba_unmultiplied(255, 255, 255, 225),
-            };
             let galley = painter.layout_no_wrap(lbl, FontId::proportional(10.0), text_primary);
             let pill = Rect::from_center_size(sp, galley.size() + Vec2::new(8.0, 4.0));
-            painter.rect_filled(pill, Rounding::same(4.0), bg);
+            painter.rect_filled(pill, Rounding::same(3.0), lbl_bg);
+            painter.rect_stroke(
+                pill,
+                Rounding::same(3.0),
+                Stroke::new(1.0_f32, border_color(theme)),
+            );
             painter.galley(pill.min + Vec2::new(4.0, 2.0), galley, text_primary);
         }
     }
@@ -1120,30 +1212,37 @@ pub fn render_map_workspace(
 
         let node_rect = Rect::from_center_size(sp, Vec2::new(rw * 2.0, rh * 2.0));
         let shape = v1::NodeShape::try_from(dev.shape).unwrap_or(v1::NodeShape::RoundedRect);
-        let border_stroke = Stroke::new(if selected { 3.2_f32 } else { 2.0_f32 }, st_col);
+        let border_stroke = Stroke::new(if selected { 2.4_f32 } else { 1.4_f32 }, st_col);
+        let shadow_col = Color32::from_rgba_unmultiplied(
+            0,
+            0,
+            0,
+            if theme == ThemeMode::Dark { 36 } else { 14 },
+        );
 
         // Selection or hover halo
         if selected || is_hovered || is_find_match {
             let halo_col = if is_find_match && !selected {
-                Color32::from_rgba_unmultiplied(250, 204, 21, 90)
+                Color32::from_rgba_unmultiplied(255, 214, 10, 90)
             } else if selected {
                 to_color32(accent_rgb(theme), 85)
             } else {
                 to_color32(accent_rgb(theme), 40)
             };
             if shape == v1::NodeShape::Circle {
-                painter.circle_stroke(sp, rw + 4.5, Stroke::new(3.0_f32, halo_col));
+                painter.circle_stroke(sp, rw + 4.0, Stroke::new(2.5_f32, halo_col));
             } else {
                 painter.rect_stroke(
-                    node_rect.expand(4.0),
-                    Rounding::same(10.0),
-                    Stroke::new(3.0_f32, halo_col),
+                    node_rect.expand(3.5),
+                    Rounding::same(6.0),
+                    Stroke::new(2.5_f32, halo_col),
                 );
             }
         }
 
         match shape {
             v1::NodeShape::Circle => {
+                painter.circle_filled(sp + Vec2::new(0.0, 1.5), rw, shadow_col);
                 painter.circle_filled(sp, rw, node_fill);
                 painter.circle_stroke(sp, rw, border_stroke);
             }
@@ -1153,13 +1252,18 @@ pub fn render_map_workspace(
                 }
             }
             _ => {
-                painter.rect_filled(node_rect, Rounding::same(8.0), node_fill);
-                painter.rect_stroke(node_rect, Rounding::same(8.0), border_stroke);
+                painter.rect_filled(
+                    node_rect.translate(Vec2::new(0.0, 1.5)),
+                    Rounding::same(4.0),
+                    shadow_col,
+                );
+                painter.rect_filled(node_rect, Rounding::same(4.0), node_fill);
+                painter.rect_stroke(node_rect, Rounding::same(4.0), border_stroke);
             }
         }
 
-        // Render icon texture resolved via 4-tier priority
-        let img_rect = node_rect.shrink(rw * 0.2);
+        // Render icon or vendor image cleanly inside node bounds
+        let img_rect = node_rect.shrink(rw * 0.14);
         match state.resolve_device_image(dev) {
             DeviceImageSource::UploadedImage(iid) => {
                 let tkey = format!("img:{iid}:64");
@@ -1187,31 +1291,36 @@ pub fn render_map_workspace(
             }
         }
 
-        // Accessibility status badge (non-color indicator)
+        // Minimal corner status dot; show glyph only when not healthy
         let badge_pos = Pos2::new(node_rect.max.x - 4.0, node_rect.min.y + 4.0);
-        painter.circle_filled(badge_pos, 9.0, st_col);
-        painter.text(
-            badge_pos,
-            egui::Align2::CENTER_CENTER,
-            state_badge_glyph(d_state),
-            FontId::proportional(8.0),
-            Color32::WHITE,
-        );
+        if d_state == v1::ProbeState::Up {
+            painter.circle_filled(badge_pos, 5.0, node_fill);
+            painter.circle_filled(badge_pos, 3.5, st_col);
+        } else {
+            painter.circle_filled(badge_pos, 7.5, node_fill);
+            painter.circle_filled(badge_pos, 6.0, st_col);
+            painter.text(
+                badge_pos,
+                egui::Align2::CENTER_CENTER,
+                state_badge_glyph(d_state),
+                FontId::proportional(7.0),
+                Color32::WHITE,
+            );
+        }
 
-        // Node label below with subtle contrast backing
+        // Node label below with solid contrast backing so link lines never obscure text
         let label = dev
             .label_template
             .replace("{name}", &dev.name)
             .replace("{ip}", &dev.address)
             .replace("{status}", state_badge_glyph(d_state))
             .replace("{rtt}", &format!("{:.1}ms", dev.last_rtt_ms));
-        painter.text(
-            Pos2::new(sp.x, node_rect.max.y + 5.0),
-            egui::Align2::CENTER_TOP,
-            label,
-            FontId::proportional((11.0 * canvas.zoom).clamp(9.0, 16.0)),
-            text_primary,
-        );
+        let lbl_font = FontId::proportional((11.0 * canvas.zoom).clamp(9.0, 15.0));
+        let galley = painter.layout(label, lbl_font, text_primary, f32::INFINITY);
+        let lbl_pos = Pos2::new(sp.x - galley.size().x * 0.5, node_rect.max.y + 4.0);
+        let lbl_rect = Rect::from_min_size(lbl_pos, galley.size()).expand2(Vec2::new(4.0, 1.5));
+        painter.rect_filled(lbl_rect, Rounding::same(3.0), bg_col.gamma_multiply(0.88));
+        painter.galley(lbl_pos, galley, text_primary);
     }
 
     // Handle pointer interactions (hit-test nodes, submaps, networks, static, link handles, links)
@@ -1296,10 +1405,15 @@ pub fn render_map_workspace(
             if let Some(l) = state.links.get(&lid) {
                 let ls = v1::LinkStatus::try_from(l.status).unwrap_or(v1::LinkStatus::Unknown);
                 let (st_lbl, _) = link_status_info(lang, theme, ls);
+                let if_disp = if l.interface_key.is_empty() {
+                    "manual / none"
+                } else {
+                    l.interface_key.as_str()
+                };
                 response.clone().on_hover_text(format!(
-                    "Link #{} [{}] — {}\nIn: {} ({:.1}%) | Out: {} ({:.1}%)",
+                    "Link #{} [{}] - {}\nRX: {} ({:.1}%) | TX: {} ({:.1}%)",
                     l.id,
-                    l.interface_key,
+                    if_disp,
                     st_lbl,
                     format_bps(l.in_bps),
                     l.in_utilization_pct,
@@ -1339,19 +1453,7 @@ pub fn render_map_workspace(
                     if let Some(did) = hit_dev {
                         if let Some(src_id) = canvas.link_source_device.take() {
                             if src_id != did {
-                                let new_link = v1::NetworkLink {
-                                    id: 0,
-                                    version: 1,
-                                    map_id,
-                                    src_device_id: src_id,
-                                    dst_device_id: did,
-                                    master_device_id: src_id,
-                                    mastering_type: v1::MasteringType::SnmpIfTraffic as i32,
-                                    link_type_id: state.link_types.keys().next().copied().unwrap_or(1),
-                                    history_enabled: true,
-                                    ..Default::default()
-                                };
-                                let _ = cmd_tx.try_send(ClientCommand::SaveLink(new_link));
+                                canvas.pending_new_link = Some((src_id, did));
                             }
                             canvas.active_tool = MapTool::Select;
                         } else {
@@ -1595,9 +1697,14 @@ pub fn render_map_workspace(
         MapTool::Select => None,
     };
     if let Some(hint_str) = tool_hint {
-        let pill_rect = Rect::from_min_size(origin + Vec2::new(12.0, 12.0), Vec2::new(360.0, 28.0));
+        let hint_pos = Pos2::new(
+            (origin.x + 12.0).min((canvas_rect.max.x - 160.0).max(origin.x + 12.0)),
+            origin.y + 12.0,
+        );
         egui::Area::new(egui::Id::new("map_tool_hint"))
-            .fixed_pos(pill_rect.min)
+            .order(egui::Order::Middle)
+            .interactable(false)
+            .fixed_pos(hint_pos)
             .show(ctx, |ui| {
                 notice_frame(theme, accent_rgb(theme)).show(ui, |ui| {
                     ui.label(egui::RichText::new(hint_str).small().strong());
@@ -1605,35 +1712,36 @@ pub fn render_map_workspace(
             });
     }
 
-    // Floating bottom-right HUD pill
+    // Floating bottom-right HUD pill (non-interactive, hairline Apple capsule)
     let hud_pos = Pos2::new(
-        (canvas_rect.max.x - 240.0).max(origin.x + 12.0),
-        (canvas_rect.max.y - 38.0).max(origin.y + 12.0),
+        (canvas_rect.max.x - 210.0).max(origin.x + 12.0),
+        (canvas_rect.max.y - 36.0).max(origin.y + 12.0),
     );
     egui::Area::new(egui::Id::new("map_hud_pill"))
+        .order(egui::Order::Middle)
+        .interactable(false)
         .fixed_pos(hud_pos)
         .show(ctx, |ui| {
             let hud_bg = match theme {
-                ThemeMode::Dark => Color32::from_rgba_unmultiplied(15, 23, 42, 210),
-                ThemeMode::Light => Color32::from_rgba_unmultiplied(255, 255, 255, 220),
+                ThemeMode::Dark => Color32::from_rgba_unmultiplied(28, 28, 30, 220),
+                ThemeMode::Light => Color32::from_rgba_unmultiplied(255, 255, 255, 232),
             };
             egui::Frame::default()
                 .fill(hud_bg)
-                .stroke(Stroke::new(
-                    1.0_f32,
-                    to_color32(accent_rgb(theme), 90),
-                ))
-                .rounding(Rounding::same(6.0))
-                .inner_margin(Margin::symmetric(10.0, 4.0))
+                .stroke(Stroke::new(1.0_f32, border_color(theme)))
+                .rounding(Rounding::same(4.0))
+                .inner_margin(Margin::symmetric(9.0, 3.0))
                 .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.small(format!(
-                            "Devices: {} | Links: {} | {:.0}%",
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} dev | {} links | {:.0}%",
                             map_device_count,
                             map_link_count,
                             canvas.zoom * 100.0
-                        ));
-                    });
+                        ))
+                        .small()
+                        .color(muted_color(theme)),
+                    );
                 });
         });
 
@@ -1730,89 +1838,87 @@ pub fn render_map_workspace(
         let mut edit_map = active_map.clone();
         let mut save_clicked = false;
         let mut close_clicked = false;
-        egui::Window::new(tr(lang, TextKey::MapSettings))
-            .collapsible(false)
-            .min_width(380.0)
-            .show(ctx, |ui| {
-                egui::Grid::new("map_settings_grid")
-                    .num_columns(2)
-                    .spacing([12.0, 8.0])
-                    .show(ui, |ui| {
-                        ui.label(tr(lang, TextKey::Name));
-                        ui.text_edit_singleline(&mut edit_map.name);
-                        ui.end_row();
+        centered_modal(tr(lang, TextKey::MapSettings), 400.0).show(ctx, |ui| {
+            egui::Grid::new("map_settings_grid")
+                .num_columns(2)
+                .spacing([14.0, 10.0])
+                .show(ui, |ui| {
+                    ui.label(tr(lang, TextKey::Name));
+                    ui.text_edit_singleline(&mut edit_map.name);
+                    ui.end_row();
 
-                        let mut poll_ov = edit_map.poll_interval_sec_override.unwrap_or(0);
-                        ui.label("Poll Override (s, 0=global)");
-                        ui.add(egui::DragValue::new(&mut poll_ov).range(0..=3600));
-                        edit_map.poll_interval_sec_override =
-                            if poll_ov == 0 { None } else { Some(poll_ov) };
-                        ui.end_row();
+                    let mut poll_ov = edit_map.poll_interval_sec_override.unwrap_or(0);
+                    ui.label("Poll Override (s, 0=global)");
+                    ui.add(egui::DragValue::new(&mut poll_ov).range(0..=3600));
+                    edit_map.poll_interval_sec_override =
+                        if poll_ov == 0 { None } else { Some(poll_ov) };
+                    ui.end_row();
 
-                        ui.label("Label Refresh (s)");
-                        ui.add(egui::DragValue::new(&mut edit_map.label_refresh_sec).range(1..=300));
-                        ui.end_row();
+                    ui.label("Label Refresh (s)");
+                    ui.add(egui::DragValue::new(&mut edit_map.label_refresh_sec).range(1..=300));
+                    ui.end_row();
 
-                        ui.label("Default Link Thickness");
-                        ui.add(
-                            egui::DragValue::new(&mut edit_map.default_link_thickness)
-                                .range(0.5..=10.0),
-                        );
-                        ui.end_row();
+                    ui.label("Default Link Thickness");
+                    ui.add(
+                        egui::DragValue::new(&mut edit_map.default_link_thickness)
+                            .range(0.5..=10.0),
+                    );
+                    ui.end_row();
 
-                        ui.label("Default Link Style");
-                        let curr_style = v1::LinkStyle::try_from(edit_map.default_link_style)
-                            .unwrap_or(v1::LinkStyle::Curved);
-                        let style_text = match curr_style {
-                            v1::LinkStyle::Straight => tr(lang, TextKey::LinkStyleStraight),
-                            v1::LinkStyle::OrthogonalRounded => {
-                                tr(lang, TextKey::LinkStyleOrthogonal)
-                            }
-                            _ => tr(lang, TextKey::LinkStyleCurved),
-                        };
-                        egui::ComboBox::from_id_salt("map_default_link_style")
-                            .selected_text(style_text)
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut edit_map.default_link_style,
-                                    v1::LinkStyle::Straight as i32,
-                                    tr(lang, TextKey::LinkStyleStraight),
-                                );
-                                ui.selectable_value(
-                                    &mut edit_map.default_link_style,
-                                    v1::LinkStyle::Curved as i32,
-                                    tr(lang, TextKey::LinkStyleCurved),
-                                );
-                                ui.selectable_value(
-                                    &mut edit_map.default_link_style,
-                                    v1::LinkStyle::OrthogonalRounded as i32,
-                                    tr(lang, TextKey::LinkStyleOrthogonal),
-                                );
-                            });
-                        ui.end_row();
+                    ui.label("Default Link Style");
+                    let curr_style = v1::LinkStyle::try_from(edit_map.default_link_style)
+                        .unwrap_or(v1::LinkStyle::Curved);
+                    let style_text = match curr_style {
+                        v1::LinkStyle::Straight => tr(lang, TextKey::LinkStyleStraight),
+                        v1::LinkStyle::OrthogonalRounded => {
+                            tr(lang, TextKey::LinkStyleOrthogonal)
+                        }
+                        _ => tr(lang, TextKey::LinkStyleCurved),
+                    };
+                    egui::ComboBox::from_id_salt("map_default_link_style")
+                        .selected_text(style_text)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut edit_map.default_link_style,
+                                v1::LinkStyle::Straight as i32,
+                                tr(lang, TextKey::LinkStyleStraight),
+                            );
+                            ui.selectable_value(
+                                &mut edit_map.default_link_style,
+                                v1::LinkStyle::Curved as i32,
+                                tr(lang, TextKey::LinkStyleCurved),
+                            );
+                            ui.selectable_value(
+                                &mut edit_map.default_link_style,
+                                v1::LinkStyle::OrthogonalRounded as i32,
+                                tr(lang, TextKey::LinkStyleOrthogonal),
+                            );
+                        });
+                    ui.end_row();
 
-                        ui.label("Background Scale");
-                        ui.add(
-                            egui::DragValue::new(&mut edit_map.background_scale)
-                                .speed(0.05)
-                                .range(0.1..=5.0),
-                        );
-                        ui.end_row();
-                    });
-
-                ui.add_space(4.0);
-                ui.checkbox(&mut edit_map.background_tile, "Tile Background Image");
-                ui.add_space(8.0);
-
-                ui.horizontal(|ui| {
-                    if ui.button(tr(lang, TextKey::Save)).clicked() {
-                        save_clicked = true;
-                    }
-                    if ui.button(tr(lang, TextKey::Close)).clicked() {
-                        close_clicked = true;
-                    }
+                    ui.label("Background Scale");
+                    ui.add(
+                        egui::DragValue::new(&mut edit_map.background_scale)
+                            .speed(0.05)
+                            .range(0.1..=5.0),
+                    );
+                    ui.end_row();
                 });
-            });
+
+            ui.add_space(6.0);
+            ui.checkbox(&mut edit_map.background_tile, "Tile Background Image");
+            ui.add_space(10.0);
+
+            let (s_click, c_click) = modal_footer_buttons(
+                ui,
+                theme,
+                !edit_map.name.trim().is_empty(),
+                tr(lang, TextKey::Save),
+                tr(lang, TextKey::Close),
+            );
+            save_clicked = s_click;
+            close_clicked = c_click;
+        });
         if save_clicked {
             let _ = cmd_tx.try_send(ClientCommand::SaveMap(edit_map));
             canvas.show_map_settings = false;

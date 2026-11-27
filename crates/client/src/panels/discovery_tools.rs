@@ -1,12 +1,12 @@
 use crate::ui_kit::{
-    accent_rgb, card_frame, empty_state_card, pick_lang, section_heading, status_pill,
-    toolbar_frame,
+    accent_rgb, card_frame, empty_state_card, pick_lang, primary_button, section_heading,
+    status_pill, table_card, toolbar_frame, warning_rgb,
 };
 use eframe::egui;
 use nextdude_client_core::connection::ClientCommand;
 use nextdude_client_core::i18n::{tr, Language, TextKey};
 use nextdude_client_core::state::ClientStateCache;
-use nextdude_client_core::theme::{RgbColor, ThemeMode};
+use nextdude_client_core::theme::ThemeMode;
 use nextdude_common::proto::v1;
 use std::collections::HashSet;
 use tokio::sync::mpsc;
@@ -41,7 +41,7 @@ impl Default for DiscoveryToolsState {
             include_lldp_cdp: true,
             selected_candidates: HashSet::new(),
             target_map_id: None,
-            import_links: true,
+            import_links: false,
             auto_layout: true,
             tool_kind: v1::ToolKind::Ping,
             tool_target: String::new(),
@@ -92,10 +92,7 @@ pub fn render_discovery_panel(
             ui.checkbox(&mut dt.include_mndp, "MNDP (UDP 5678)");
             ui.checkbox(&mut dt.include_lldp_cdp, "LLDP / CDP");
             let can_scan = !dt.cidrs_text.trim().is_empty() || dt.include_mndp;
-            if ui
-                .add_enabled(can_scan, egui::Button::new(tr(lang, TextKey::StartDiscovery)))
-                .clicked()
-            {
+            if primary_button(ui, theme, can_scan, tr(lang, TextKey::StartDiscovery)).clicked() {
                 let cidrs = dt
                     .cidrs_text
                     .split(',')
@@ -156,7 +153,10 @@ pub fn render_discovery_panel(
                             ui.selectable_value(&mut dt.target_map_id, Some(m.id), &m.name);
                         }
                     });
-                ui.checkbox(&mut dt.import_links, "Import Links");
+                ui.checkbox(
+                    &mut dt.import_links,
+                    pick_lang(lang, "Impor Link (LLDP/CDP)", "Import Links (LLDP/CDP)"),
+                );
                 ui.checkbox(&mut dt.auto_layout, "Auto Layout");
                 if ui.button("Select New (Non-Dup)").clicked() {
                     dt.selected_candidates.clear();
@@ -167,8 +167,7 @@ pub fn render_discovery_panel(
                     }
                 }
                 let can_import = !dt.selected_candidates.is_empty() && dt.target_map_id.is_some();
-                if ui
-                    .add_enabled(can_import, egui::Button::new(tr(lang, TextKey::ImportSelected)))
+                if primary_button(ui, theme, can_import, tr(lang, TextKey::ImportSelected))
                     .clicked()
                 {
                     if let Some(mid) = dt.target_map_id {
@@ -187,42 +186,39 @@ pub fn render_discovery_panel(
         });
         ui.add_space(6.0);
 
-        card_frame(theme).show(ui, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                egui::Grid::new("disc_cands")
-                    .striped(true)
-                    .spacing([12.0, 6.0])
-                    .num_columns(6)
-                    .show(ui, |ui| {
-                        ui.strong("Sel");
-                        ui.strong("IP");
-                        ui.strong("sysName");
-                        ui.strong(tr(lang, TextKey::Vendor));
-                        ui.strong(tr(lang, TextKey::Model));
-                        ui.strong("Status");
-                        ui.end_row();
-                        for c in &prog.candidates {
-                            let mut checked = dt.selected_candidates.contains(&c.temp_id);
-                            if ui.checkbox(&mut checked, "").changed() {
-                                if checked {
-                                    dt.selected_candidates.insert(c.temp_id.clone());
-                                } else {
-                                    dt.selected_candidates.remove(&c.temp_id);
-                                }
-                            }
-                            ui.monospace(&c.ip);
-                            ui.strong(&c.sys_name);
-                            ui.label(&c.vendor);
-                            ui.label(&c.model);
-                            if c.duplicate_existing {
-                                status_pill(ui, "Existing", RgbColor::new(245, 158, 11));
+        table_card(ui, theme, "disc_cands_scroll", |ui| {
+            egui::Grid::new("disc_cands")
+                .spacing([16.0, 10.0])
+                .num_columns(6)
+                .show(ui, |ui| {
+                    ui.strong("Sel");
+                    ui.strong("IP");
+                    ui.strong("sysName");
+                    ui.strong(tr(lang, TextKey::Vendor));
+                    ui.strong(tr(lang, TextKey::Model));
+                    ui.strong("Status");
+                    ui.end_row();
+                    for c in &prog.candidates {
+                        let mut checked = dt.selected_candidates.contains(&c.temp_id);
+                        if ui.checkbox(&mut checked, "").changed() {
+                            if checked {
+                                dt.selected_candidates.insert(c.temp_id.clone());
                             } else {
-                                status_pill(ui, "New", accent_rgb(theme));
+                                dt.selected_candidates.remove(&c.temp_id);
                             }
-                            ui.end_row();
                         }
-                    });
-            });
+                        ui.monospace(&c.ip);
+                        ui.strong(&c.sys_name);
+                        ui.label(&c.vendor);
+                        ui.label(&c.model);
+                        if c.duplicate_existing {
+                            status_pill(ui, "Existing", warning_rgb(theme));
+                        } else {
+                            status_pill(ui, "New", accent_rgb(theme));
+                        }
+                        ui.end_row();
+                    }
+                });
         });
     } else {
         empty_state_card(
@@ -307,10 +303,7 @@ pub fn render_tools_panel(
                 ui.text_edit_singleline(&mut dt.tool_oid);
             }
             let can_run = !dt.tool_target.trim().is_empty();
-            if ui
-                .add_enabled(can_run, egui::Button::new(tr(lang, TextKey::RunTool)))
-                .clicked()
-            {
+            if primary_button(ui, theme, can_run, tr(lang, TextKey::RunTool)).clicked() {
                 dt.tool_output.clear();
                 let _ = cmd_tx.try_send(ClientCommand::RunTool(v1::RunToolRequest {
                     kind: dt.tool_kind as i32,
